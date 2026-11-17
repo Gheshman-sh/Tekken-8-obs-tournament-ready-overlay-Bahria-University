@@ -1,6 +1,35 @@
-# Tekken 8 Tournament Broadcast & Control
+# Tekken 8 OBS Tournament Overlay for Bahria University
 
-A local tournament scoreboard and broadcast-control system for Tekken 8 events. The system provides a browser-based operator control panel, a transparent OBS overlay, automatic presentation timers, and 5-second or 10-second slow-motion replay capture.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![OBS Studio](https://img.shields.io/badge/OBS%20Studio-28%2B-302E31.svg)](https://obsproject.com/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933.svg)](https://nodejs.org/)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4.svg)](https://www.microsoft.com/windows)
+
+**A tournament-ready Tekken 8 OBS overlay, scoreboard, broadcast controller, and instant replay system built for Bahria University Esports events.**
+
+Run a live Tekken 8 tournament from a browser-based control panel, connect OBS Studio over WebSocket, display a transparent 1920x1080 overlay, control match presentation states, and publish 5-second or 10-second slow-motion replays with synchronized audio.
+
+## Features
+
+- Transparent OBS Browser Source overlay for 1920x1080 broadcasts
+- Operator scoreboard for player names, characters, round, format, game number, and set scores
+- Match Intro, Game Transition, Winner, Tournament Standby, Gameplay, and Replay states
+- Configurable server-controlled presentation timers
+- OBS WebSocket v5 connection and live OBS status
+- 5-second and 10-second slow-motion replay capture using FFmpeg
+- LAN control panel access for an operator PC or another device
+- Local tournament and replay management with no cloud account required
+
+## Contents
+
+- [System requirements](#system-requirements)
+- [Quick start](#quick-start)
+- [OBS setup](#obs-setup)
+- [Using the control panel](#using-the-control-panel)
+- [LAN and projector setup](#lan-and-projector-setup)
+- [OBS troubleshooting](#obs-troubleshooting)
+- [Data and privacy](#data-and-privacy)
+- [License](#license)
 
 ## System requirements
 
