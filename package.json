@@ -1,0 +1,16 @@
+{
+  "name": "tekken8-tournament",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Tekken 8 tournament broadcast and control system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "obs-websocket-js": "^5.0.6",
+    "ws": "^8.18.0"
+  }
+}

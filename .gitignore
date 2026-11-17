@@ -1,0 +1,11 @@
+node_modules/
+data/processed-replays/
+data/replays.json
+data/tournament.json
+.env
+.env.*
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
