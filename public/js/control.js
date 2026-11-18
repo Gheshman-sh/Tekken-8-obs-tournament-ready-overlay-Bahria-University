@@ -122,39 +122,93 @@
     return 'OBS reported a connection or status error. Check the OBS WebSocket settings and try again.';
   }
   function renderObs(obs) { const status = document.getElementById('obs-status'); const feedback = document.getElementById('obs-feedback'); const error = obs.error ? formatObsError(obs.error) : ''; const replayUnavailable = /replay buffer.*(not available|unavailable)/i.test(obs.error || ''); status.textContent = obs.connected ? 'Connected' : 'Disconnected'; status.className = `status-text ${obs.connected ? 'online-text' : 'offline-text'}`; feedback.textContent = obs.connected ? error ? `Connected, but: ${error}` : 'OBS WebSocket connected.' : error ? `Connection failed: ${error}` : 'Not connected to OBS.'; feedback.className = `obs-feedback ${obs.connected ? error ? 'warning-text' : 'online-text' : error ? 'offline-text' : ''}`; document.getElementById('replay-buffer').textContent = replayUnavailable ? 'Unavailable' : obs.replayBufferActive ? 'Running' : 'Stopped'; document.getElementById('stream-status').textContent = obs.streaming ? 'Live' : 'Offline'; document.getElementById('record-status').textContent = obs.recording ? 'Recording' : 'Stopped'; if (error) notify(error, true); }
-  window.updatePreviewStatus = event => {
-    const xhr = event.detail && event.detail.xhr;
+  let previewPeer = null;
+  let previewReconnectTimer = 0;
+  let previewReconnectDelay = 1500;
+  let previewStatusTimer = 0;
+  function setPreviewStatus(kind, title, description) {
+    const health = document.getElementById('preview-health');
     const empty = document.getElementById('preview-empty');
-    if (!xhr) {
-      empty.hidden = false;
-      empty.textContent = 'Preview status unavailable';
-      return;
+    health.textContent = kind;
+    health.className = `status ${kind === 'Live' ? 'online' : kind === 'Connecting' ? 'info' : 'offline'}`;
+    document.getElementById('preview-title').textContent = title;
+    document.getElementById('preview-description').textContent = description;
+    empty.hidden = kind === 'Live';
+  }
+  async function waitForIceGathering(peer) {
+    if (peer.iceGatheringState === 'complete') return;
+    await new Promise(resolve => {
+      const timeout = setTimeout(resolve, 2500);
+      peer.addEventListener('icegatheringstatechange', () => {
+        if (peer.iceGatheringState === 'complete') { clearTimeout(timeout); resolve(); }
+      });
+    });
+  }
+  async function connectPreview() {
+    clearTimeout(previewReconnectTimer);
+    if (previewPeer) {
+      previewPeer.close();
+      previewPeer = null;
     }
-    if (xhr.status === 200) {
-      const scene = xhr.getResponseHeader('X-OBS-Scene');
-      const previewStatus = xhr.getResponseHeader('X-OBS-Preview');
-      if (previewStatus) {
-        empty.hidden = false;
-        empty.textContent = previewStatus === 'disconnected' ? 'OBS disconnected — showing the local overlay preview' : 'OBS preview error — showing the local overlay preview';
-        document.getElementById('preview-title').textContent = 'Program overlay';
-        document.getElementById('preview-description').textContent = '1920 × 1080 transparent overlay';
-        return;
+    setPreviewStatus('Connecting', 'Connecting OBS Program…', 'Waiting for the LAN WebRTC preview stream');
+    try {
+      const statusResponse = await fetch('/api/preview/status', { cache: 'no-store' });
+      const status = await statusResponse.json();
+      if (!statusResponse.ok || !status.relay.running) throw new Error('Preview relay is not running.');
+      if (!status.relay.ready) throw new Error('OBS has not started publishing the preview stream.');
+
+      const peer = new RTCPeerConnection();
+      previewPeer = peer;
+      peer.addTransceiver('video', { direction: 'recvonly' });
+      peer.addTransceiver('audio', { direction: 'recvonly' });
+      peer.addEventListener('track', event => {
+        const video = document.getElementById('obs-live-preview');
+        video.srcObject = event.streams[0] || new MediaStream([event.track]);
+        video.play().catch(() => {});
+        setPreviewStatus('Live', 'OBS Program', '1920 × 1080 · Live LAN preview');
+        previewReconnectDelay = 1500;
+      });
+      peer.addEventListener('connectionstatechange', () => {
+        if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed') schedulePreviewReconnect();
+      });
+
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      await waitForIceGathering(peer);
+      const response = await fetch('/api/preview/whep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp', 'Accept': 'application/sdp' },
+        body: peer.localDescription.sdp
+      });
+      if (!response.ok) throw new Error(await response.text() || 'WebRTC preview negotiation failed.');
+      const answer = await response.text();
+      await peer.setRemoteDescription({ type: 'answer', sdp: answer });
+    } catch (error) {
+      setPreviewStatus('Disconnected', 'OBS Program unavailable', error.message);
+      schedulePreviewReconnect();
+    }
+  }
+  function schedulePreviewReconnect() {
+    clearTimeout(previewReconnectTimer);
+    previewReconnectTimer = setTimeout(connectPreview, previewReconnectDelay);
+    previewReconnectDelay = Math.min(previewReconnectDelay * 1.5, 10000);
+  }
+  async function pollPreviewStatus() {
+    try {
+      const response = await fetch('/api/preview/status', { cache: 'no-store' });
+      const status = await response.json();
+      if (!status.relay.running) {
+        setPreviewStatus('Disconnected', 'Preview relay stopped', 'Restart the tournament server to restore the relay');
+      } else if (!status.relay.ready) {
+        if (previewPeer && previewPeer.connectionState === 'connected') return;
+        setPreviewStatus('Connecting', 'Waiting for OBS Program', 'Configure OBS to publish rtmp://127.0.0.1:1935/preview');
+      } else if (!previewPeer || previewPeer.connectionState !== 'connected') {
+        connectPreview();
       }
-      empty.hidden = true;
-      document.getElementById('preview-title').textContent = 'OBS Program';
-      document.getElementById('preview-description').textContent = scene ? `OBS Program · ${scene}` : 'OBS Program output';
-    } else {
-      empty.hidden = false;
-      empty.textContent = 'OBS unavailable — showing the local overlay preview';
-      document.getElementById('preview-title').textContent = 'Program overlay';
-      document.getElementById('preview-description').textContent = '1920 × 1080 transparent overlay';
+    } catch (error) {
+      setPreviewStatus('Disconnected', 'Preview disconnected', 'The local preview service is unreachable');
     }
-  };
-  window.updatePreviewLoading = () => {
-    const empty = document.getElementById('preview-empty');
-    empty.hidden = false;
-    empty.textContent = 'Refreshing OBS preview…';
-  };
+  }
   async function connectObs() {
     const button = document.getElementById('obs-connect');
     const feedback = document.getElementById('obs-feedback');
@@ -458,7 +512,12 @@
   document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));
   document.querySelectorAll('[data-timer-action]').forEach(button => button.onclick = () => action('/api/broadcast/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.timerAction }) }, 'Broadcast timer updated.', button));
-  document.getElementById('refresh-preview').onclick = event => htmx.trigger(document.getElementById('obs-live-preview'), 'manualRefresh');
+  document.getElementById('refresh-preview').onclick = () => connectPreview();
+  document.getElementById('preview-fullscreen').onclick = () => {
+    const frame = document.querySelector('.preview-frame');
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (frame.requestFullscreen) frame.requestFullscreen();
+  };
   document.querySelectorAll('[data-replay]').forEach(button => button.onclick = () => action(`/api/replay/${button.dataset.replay}`, { method: 'POST' }, 'Replay control updated.', button));
   document.querySelectorAll('[data-replay-preset]').forEach(button => button.onclick = () => action('/api/replay/preset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seconds: Number(button.dataset.replayPreset) }) }, `Starting ${button.dataset.replayPreset}s replay.`, button, 'Starting…'));
   document.getElementById('obs-connect').onclick = connectObs;
@@ -498,5 +557,7 @@
   }
   connectControlSocket();
   Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); }).catch(error => notify(friendlyError(error.message), 'error'));
+  connectPreview();
+  previewStatusTimer = setInterval(pollPreviewStatus, 3000);
   setInterval(updateTimerDisplay, 250);
 }());

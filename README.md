@@ -16,6 +16,7 @@ Run a live Tekken 8 tournament from a browser-based control panel, connect OBS S
 - Match Intro, Game Transition, Winner, Tournament Standby, Gameplay, and Replay states
 - Configurable server-controlled presentation timers
 - OBS WebSocket v5 connection and live OBS status
+- Genuine low-latency OBS Program WebRTC preview through the local control panel
 - 5-second and 10-second slow-motion replay capture using FFmpeg
 - LAN control panel access for an operator PC or another device
 - Local tournament and replay management with no cloud account required
@@ -58,6 +59,20 @@ npm start
 The control panel is available at `http://localhost:3000/control`. The overlay is available at `http://localhost:3000/overlay`.
 
 ## OBS setup
+
+### Real-time OBS Program preview
+
+The control panel preview is a WebRTC stream of the actual OBS Program output. It uses a local MediaMTX relay that is downloaded and started by the Node server on the first Windows run.
+
+1. In OBS, open **Settings > Stream**.
+2. Select **Custom** as the service.
+3. Set the server to `rtmp://127.0.0.1:1935/preview`.
+4. Set the stream key to `preview`.
+5. Start streaming.
+
+This custom RTMP destination is a private localhost-only monitoring relay. It does not publish to an internet streaming service. The control panel receives it through WebRTC on the existing LAN port `3000`.
+
+The OBS encoder creates the preview stream, so configure OBS output resolution and frame rate normally. The relay adds no second OBS scene or browser mockup. Because OBS encodes for this preview, use a suitable OBS canvas/output setting and stop the custom preview stream when it is not needed.
 
 ### 1. Enable OBS WebSocket
 

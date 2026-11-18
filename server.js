@@ -6,6 +6,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const { WebSocketServer } = require('ws');
 const OBSWebSocket = require('obs-websocket-js').default;
 
@@ -16,6 +17,9 @@ const REPLAYS_FILE = path.join(DATA_DIR, 'replays.json');
 const GUEST_PROFILES_FILE = path.join(DATA_DIR, 'guest-profiles.json');
 const OBS_CREDENTIALS_FILE = path.join(DATA_DIR, 'obs-credentials.json');
 const PROCESSED_REPLAY_DIR = path.join(DATA_DIR, 'processed-replays');
+const PREVIEW_BIN_DIR = path.join(DATA_DIR, 'preview-relay');
+const PREVIEW_CONFIG_FILE = path.join(PREVIEW_BIN_DIR, 'mediamtx.yml');
+const PREVIEW_BINARY_FILE = path.join(PREVIEW_BIN_DIR, process.platform === 'win32' ? 'mediamtx.exe' : 'mediamtx');
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -116,6 +120,84 @@ const broadcastModes = new Set(['gameplay', 'match_intro', 'game_transition', 'w
 const timerActions = new Set(['skip', 'extend', 'cancel', 'gameplay', 'previous']);
 function publicReplays() {
   return replays.map(replay => ({ ...replay, available: Boolean(replay.filePath && fs.existsSync(path.resolve(replay.filePath))) }));
+}
+
+let previewRelayProcess = null;
+let previewRelayStarting = false;
+const PREVIEW_RELAY_CONFIG = `logLevel: warn
+rtmp: yes
+rtmpAddress: 127.0.0.1:1935
+webrtc: yes
+webrtcAddress: 127.0.0.1:8889
+api: yes
+apiAddress: 127.0.0.1:9997
+paths:
+  preview:
+    source: publisher
+`;
+
+function downloadPreviewRelay() {
+  fs.mkdirSync(PREVIEW_BIN_DIR, { recursive: true });
+  fs.writeFileSync(PREVIEW_CONFIG_FILE, PREVIEW_RELAY_CONFIG);
+  if (fs.existsSync(PREVIEW_BINARY_FILE)) return Promise.resolve();
+  if (process.platform !== 'win32') return Promise.reject(new Error('Automatic preview relay download is currently supported on Windows only.'));
+  const version = 'v1.11.3';
+  const zipFile = path.join(PREVIEW_BIN_DIR, 'mediamtx.zip');
+  const url = `https://github.com/bluenviron/mediamtx/releases/download/${version}/mediamtx_${version}_windows_amd64.zip`;
+  return new Promise((resolve, reject) => {
+    execFileAsync('curl.exe', ['--fail', '--location', '--silent', '--show-error', '--output', zipFile, url])
+      .then(async () => {
+        try {
+          await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', `Expand-Archive -LiteralPath '${zipFile}' -DestinationPath '${PREVIEW_BIN_DIR}' -Force`]);
+          fs.unlinkSync(zipFile);
+          if (!fs.existsSync(PREVIEW_BINARY_FILE)) throw new Error('MediaMTX executable was not found after extraction.');
+          resolve();
+        } catch (error) { reject(error); }
+      })
+      .catch(error => reject(new Error(`Preview relay download failed: ${error.message}`)));
+  });
+}
+
+function previewRelayStatus() {
+  return new Promise(resolve => {
+    const request = http.get('http://127.0.0.1:9997/v3/paths/list', response => {
+      let body = '';
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const preview = data.items && (data.items.preview || data.items.find && data.items.find(item => item.name === 'preview'));
+          resolve({
+            running: true,
+            ready: Boolean(preview && preview.ready),
+            readers: preview && preview.readers ? preview.readers.length : 0
+          });
+        } catch (error) { resolve({ running: true, ready: false, readers: 0 }); }
+      });
+    });
+    request.on('error', () => resolve({ running: false, ready: false, readers: 0 }));
+    request.setTimeout(1000, () => { request.destroy(); resolve({ running: false, ready: false, readers: 0 }); });
+  });
+}
+
+async function startPreviewRelay() {
+  if (previewRelayStarting) return;
+  previewRelayStarting = true;
+  try {
+    await downloadPreviewRelay();
+    if (!previewRelayProcess) {
+      previewRelayProcess = spawn(PREVIEW_BINARY_FILE, [PREVIEW_CONFIG_FILE], {
+        cwd: PREVIEW_BIN_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+      previewRelayProcess.on('exit', () => { previewRelayProcess = null; });
+    }
+  } catch (error) {
+    console.error(`Preview relay unavailable: ${error.message}`);
+  } finally {
+    previewRelayStarting = false;
+  }
 }
 
 const OBS_CREDENTIAL_KEY_FILE = path.join(DATA_DIR, '.obs-credentials.key');
@@ -237,42 +319,29 @@ app.get('/api/replays/:id/video', (req, res) => {
     if (error && !res.headersSent) res.status(error.statusCode || 500).json({ error: 'Replay file could not be served.' });
   });
 });
-app.get('/api/obs/preview', async (req, res) => {
-  if (!obsStatus.connected) return res.status(503).json({ error: 'OBS is not connected.' });
-  try {
-    const scene = await obsRequest('GetCurrentProgramScene');
-    const screenshot = await obsRequest('GetSourceScreenshot', {
-      sourceName: scene.currentProgramSceneName,
-      imageFormat: 'png',
-      imageWidth: 1920,
-      imageHeight: 1080,
-      imageCompressionQuality: 100
-    });
-    res.json({ imageData: screenshot.imageData, sceneName: scene.currentProgramSceneName });
-  } catch (error) {
-    res.status(502).json({ error: `OBS preview failed: ${error.message}` });
-  }
+app.get('/api/preview/status', async (req, res) => {
+  const relay = await previewRelayStatus();
+  res.json({ relay, obsConnected: obsStatus.connected, rtmpUrl: 'rtmp://127.0.0.1:1935/preview', streamKey: 'preview' });
 });
-app.get('/api/obs/preview/htmx', async (req, res) => {
-  if (!obsStatus.connected) {
-    res.set('X-OBS-Preview', 'disconnected');
-    return res.send('<iframe class="preview-fallback" src="/overlay?preview=1" title="Transparent tournament overlay preview"></iframe>');
-  }
-  try {
-    const scene = await obsRequest('GetCurrentProgramScene');
-    const screenshot = await obsRequest('GetSourceScreenshot', {
-      sourceName: scene.currentProgramSceneName,
-      imageFormat: 'png',
-      imageWidth: 1920,
-      imageHeight: 1080,
-      imageCompressionQuality: 100
-    });
-    res.set('X-OBS-Scene', scene.currentProgramSceneName);
-    res.send(`<img class="htmx-preview-image" alt="OBS Program preview" src="${screenshot.imageData}">`);
-  } catch (error) {
-    res.set('X-OBS-Preview', 'error');
-    return res.send('<iframe class="preview-fallback" src="/overlay?preview=1" title="Transparent tournament overlay preview"></iframe>');
-  }
+app.post('/api/preview/whep', express.raw({ type: '*/*', limit: '1mb' }), (req, res) => {
+  const relayRequest = http.request({
+    hostname: '127.0.0.1',
+    port: 8889,
+    path: '/preview/whep',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/sdp',
+      'Accept': 'application/sdp',
+      'Content-Length': req.body.length
+    }
+  }, relayResponse => {
+    res.status(relayResponse.statusCode || 502);
+    relayResponse.headers.location && res.set('Location', relayResponse.headers.location);
+    relayResponse.headers['content-type'] && res.set('Content-Type', relayResponse.headers['content-type']);
+    relayResponse.pipe(res);
+  });
+  relayRequest.on('error', () => res.status(503).json({ error: 'The local preview relay is not available.' }));
+  relayRequest.end(req.body);
 });
 
 function publicState() {
@@ -665,4 +734,5 @@ wss.on('connection', socket => {
   socket.on('close', () => broadcast({ type: 'state', state: publicState(), obs: obsStatus, replays: publicReplays() }));
 });
 
+startPreviewRelay();
 server.listen(PORT, '0.0.0.0', () => console.log(`Tekken Tournament running on http://localhost:${PORT}`));

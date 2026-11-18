@@ -5,6 +5,7 @@ data/tournament.json
 data/guest-profiles.json
 data/obs-credentials.json
 data/.obs-credentials.key
+data/preview-relay/
 .env
 .env.*
 *.log
