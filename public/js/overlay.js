@@ -209,6 +209,31 @@
     previousScores[playerKey] = safeScore;
   }
 
+  // Long names step down in size by length so they never clip in the fixed-width name panel.
+  // Class-based (not measured) so it is correct even while the gameplay state is hidden.
+  function fitName(key, name) {
+    const length = String(name || '').length;
+    const cls = length > 22 ? 'len-xl' : length > 16 ? 'len-lg' : length > 12 ? 'len-md' : '';
+    document.querySelectorAll(`.state-gameplay [data-bind="${key}"]`).forEach(element => {
+      element.classList.remove('len-md', 'len-lg', 'len-xl');
+      if (cls) element.classList.add(cls);
+    });
+  }
+
+  // Brief pop on the score digit when it changes (skipped on first render).
+  const lastScoreShown = { p1: null, p2: null };
+  function bumpScore(playerKey, score) {
+    const value = Number(score) || 0;
+    const previous = lastScoreShown[playerKey];
+    lastScoreShown[playerKey] = value;
+    if (previous === null || previous === value) return;
+    const element = document.querySelector(`.state-gameplay .${playerKey}-score span`);
+    if (!element) return;
+    element.classList.remove('score-bump');
+    void element.offsetWidth;
+    element.classList.add('score-bump');
+  }
+
   function render(state) {
     latestState = state;
     const settings = state.settings || {};
@@ -241,6 +266,8 @@
     set('p1Name', state.player1.name); set('p1Character', settings.showCharacters ? state.player1.character : '');
     set('p1Score', state.player1.score); set('p2Name', state.player2.name);
     set('p2Character', settings.showCharacters ? state.player2.character : ''); set('p2Score', state.player2.score);
+    fitName('p1Name', state.player1.name); fitName('p2Name', state.player2.name);
+    bumpScore('p1', state.player1.score); bumpScore('p2', state.player2.score);
     renderScoreIndicators('p1', state.player1.score, state.matchFormat);
     renderScoreIndicators('p2', state.player2.score, state.matchFormat);
     set('winnerName', winner.name); set('winnerCharacter', winner.character);

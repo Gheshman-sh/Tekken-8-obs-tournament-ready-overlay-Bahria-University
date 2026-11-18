@@ -1038,7 +1038,7 @@ h2 {
 
 @media (max-width: 500px) {
     .system-panel .obs-metrics {
-        grid-template-columns: 1fr
+        grid-template-columns: 1fr;
         gap: 5px
     }
 
@@ -1048,7 +1048,7 @@ h2 {
     }
 
     .system-panel .system-metrics {
-        grid-template-columns: 1fr
+        grid-template-columns: 1fr;
         gap: 5px
     }
 

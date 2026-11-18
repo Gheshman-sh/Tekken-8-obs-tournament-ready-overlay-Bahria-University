@@ -19,8 +19,9 @@ body {
   height: 100vh;
   overflow: hidden;
   background: transparent;
-  /* gameplay HUD sizing: everything scales with viewport width so it matches the layout at any size */
-  --hud-h: 4.3vw;
+  /* 1 --u == 1px on the 1920x1080 broadcast canvas (scales if the source is resized) */
+  --u: calc(100vw / 1920);
+  --hud-h: calc(var(--u) * 92);
   --red: #ff4748;
   --blue: #4599ff;
   --ink: #0b0c0f;
@@ -117,6 +118,9 @@ body {
 
 /* ==========================================================
    ACTIVE GAMEPLAY — top broadcast HUD
+   Built on a 1920x1080 canvas: 1 --u == 1px at 1920 wide.
+   Every diagonal is a fixed --cut (px) so neighbouring pieces
+   always interlock; nothing is positioned with magic offsets.
    ========================================================== */
 .overlay[data-mode="gameplay"] .topline,
 .overlay[data-mode="replay"] .topline {
@@ -124,226 +128,286 @@ body {
 }
 
 .gameplay-board {
+  --cut: calc(var(--u) * 30);
+  --gap: calc(var(--u) * 6);
+  --bar: calc(var(--u) * 5);
   position: absolute;
   z-index: 4;
-  top: 0;
-  left: 3.5%;
-  width: 93%;
-  height: var(--hud-h);
-  display: grid;
-  grid-template-columns: 39.5% 21% 39.5%;
-  filter: drop-shadow(0 .55vw .7vw rgba(0, 0, 0, .24));
+  top: calc(var(--u) * 0);
+  left: calc(var(--u) * 60);
+  width: calc(var(--u) * 1800);
+  height: calc(var(--u) * 78);
+  display: flex;
+  align-items: stretch;
+  filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 10) rgba(0, 0, 0, .35));
   text-transform: uppercase;
-  animation: gameplay-enter .58s cubic-bezier(.2,.75,.2,1) both;
+  font-family: "Bahnschrift", "Arial Narrow", "Roboto Condensed", "Liberation Sans Narrow", "Segoe UI", sans-serif;
 }
 
+/* ---- player halves ---- */
 .gameplay-player {
-  position: relative;
-  height: 100%;
-  display: grid;
-  align-items: center;
+  --accent: var(--red);
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
   color: var(--ink);
-  background: #f2f3f4;
-  border-bottom: 2px solid var(--ink);
-}
-
-.gameplay-one {
-  grid-template-columns: 65% 12% 23%;
-  background: linear-gradient(90deg, #c9ccd1 0 7.5%, var(--red) 7.5% 100%);
-  clip-path: polygon(0 0, 100% 0, 93.5% 82%, 96% 100%, 4% 100%);
 }
 
 .gameplay-two {
-  grid-template-columns: 23% 12% 65%;
-  background: linear-gradient(270deg, #c9ccd1 0 7.5%, var(--blue) 7.5% 100%);
-  clip-path: polygon(0 0, 100% 0, 96% 100%, 4% 82%, 6.5% 100%, 0 100%);
+  --accent: var(--blue);
+  flex-direction: row-reverse
 }
 
-.gameplay-one::before,
-.gameplay-two::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  bottom: 0;
-  width: 78%;
-  height: 14%;
-  background: var(--ink);
-}
-
-.gameplay-one::before { left: 0; clip-path: polygon(0 0, 100% 0, 98% 100%, 0 100%) }
-.gameplay-two::before { right: 0; clip-path: polygon(0 0, 100% 0, 100% 100%, 2% 100%) }
-
-.player-identity {
+/* name panel: coloured, one diagonal on the inner edge */
+.gameplay-name {
+  position: relative;
+  flex: 1 1 0;
   min-width: 0;
-  height: 100%;
   display: flex;
   align-items: center;
-  gap: .65vw;
-  padding: 0 1.1vw 0 1.7vw;
+  gap: calc(var(--u) * 16);
+  padding: 0 calc(var(--u) * 20) 0 calc(var(--u) * 14);
+  background:
+    linear-gradient(var(--ink), var(--ink)) left bottom / 100% var(--bar) no-repeat,
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 55%),
+    var(--accent);
 }
 
-.gameplay-two .player-identity {
-  justify-content: flex-end;
-  text-align: right;
-  padding: 0 1.7vw 0 1.1vw;
+.gameplay-one .gameplay-name {
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%);
+  padding-right: calc(var(--u) * 44)
+}
+
+.gameplay-two .gameplay-name {
+  flex-direction: row-reverse;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--cut) 100%);
+  padding-left: calc(var(--u) * 44);
+  padding-right: calc(var(--u) * 14)
 }
 
 .player-side {
   flex: 0 0 auto;
-  width: 1.55vw;
-  height: 1.55vw;
+  width: calc(var(--u) * 46);
+  height: calc(var(--u) * 46);
   display: grid;
   place-items: center;
   background: var(--ink);
   color: #fff;
-  font-size: .48vw;
+  font-size: calc(var(--u) * 17);
   font-weight: 900;
-  letter-spacing: .06em;
-  clip-path: polygon(18% 0, 100% 0, 82% 100%, 0 100%);
+  letter-spacing: .04em;
+  clip-path: polygon(22% 0, 100% 0, 78% 100%, 0 100%);
 }
 
 .player-copy {
   min-width: 0;
-  flex: 1
+  flex: 1 1 0;
+  text-align: center;
 }
 
 .player-copy strong {
   display: block;
-  font-family: "Arial Narrow", "Roboto Condensed", "Segoe UI", sans-serif;
-  font-size: 1.28vw;
-  font-weight: 900;
-  line-height: 1;
+  font-size: calc(var(--u) * 42);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: .02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: .02em;
 }
+
+.player-copy strong.len-md { font-size: calc(var(--u) * 36) }
+.player-copy strong.len-lg { font-size: calc(var(--u) * 30) }
+.player-copy strong.len-xl { font-size: calc(var(--u) * 25) }
 
 .player-copy small {
   display: block;
-  margin-top: .28vw;
-  min-height: .48vw;
-  font-size: .48vw;
+  min-height: calc(var(--u) * 14);
+  margin-top: calc(var(--u) * 2);
+  font-size: calc(var(--u) * 13);
   font-weight: 800;
-  letter-spacing: .14em;
+  line-height: 1;
+  letter-spacing: .16em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: .72;
+  opacity: .75;
 }
 
+/* no character shown -> drop the subtitle so the name re-centres vertically */
+.player-copy small:empty { display: none }
+
+/* score box: light surface, parallelogram that interlocks with the name panel */
 .gameplay-score {
-  height: 82%;
+  position: relative;
+  flex: 0 0 calc(var(--u) * 150);
   display: grid;
   place-items: center;
-  background: #eff0f1;
+  background:
+    linear-gradient(var(--ink), var(--ink)) left bottom / 100% var(--bar) no-repeat,
+    #f2f3f4;
   color: var(--ink);
-  font-family: "Arial Narrow", "Segoe UI", sans-serif;
-  font-size: 1.75vw;
-  font-weight: 950;
-  box-shadow: inset 0 0 0 1px rgba(11,12,15,.12);
+  font-size: calc(var(--u) * 58);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.p1-score { clip-path: polygon(28% 0, 100% 0, 72% 100%, 0 100%) }
-.p2-score { clip-path: polygon(0 0, 72% 0, 100% 100%, 28% 100%) }
+.gameplay-score span { display: block; padding-bottom: calc(var(--u) * 4) }
 
-.game-win-row {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: .24vw;
+.gameplay-one .gameplay-score {
+  margin-left: calc(var(--gap) - var(--cut));
+  clip-path: polygon(var(--cut) 0, 100% 0, calc(100% - var(--cut)) 100%, 0 100%);
 }
 
-.p1-win-row { flex-direction: row }
-.p2-win-row { flex-direction: row }
-
-.win-marker {
-  width: .38vw;
-  height: .72vw;
-  border: 1px solid rgba(11,12,15,.58);
-  background: rgba(255,255,255,.22);
-  clip-path: polygon(50% 0, 100% 28%, 82% 100%, 18% 100%, 0 28%);
-  opacity: .72;
-  transition: transform .22s ease, background-color .22s ease, opacity .22s ease;
+.gameplay-two .gameplay-score {
+  margin-right: calc(var(--gap) - var(--cut));
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% 100%, var(--cut) 100%);
 }
 
-.win-marker.won {
-  background: #fff;
-  border-color: #fff;
-  opacity: 1;
-  box-shadow: 0 0 .35vw rgba(255,255,255,.55);
-  animation: win-pop .36s cubic-bezier(.2,.8,.2,1);
-}
+.gameplay-two .gameplay-name { margin-right: 0 }
 
+.gameplay-score span.score-bump { animation: score-bump .45s cubic-bezier(.2, .8, .2, 1) }
+
+/* ---- centre ---- */
 .gameplay-center {
   position: relative;
   z-index: 2;
-  height: 82%;
-  align-self: start;
+  flex: 0 0 calc(var(--u) * 560);
+  margin: 0 calc(var(--gap) - var(--cut));
   display: grid;
-  grid-template-rows: 43% 34% 23%;
-  margin-top: 0;
-  background: #f5f6f7;
+  grid-template-columns: calc(var(--u) * 112) 1fr calc(var(--u) * 112);
+  align-items: center;
+  background:
+    linear-gradient(var(--ink), var(--ink)) left bottom / 100% var(--bar) no-repeat,
+    #f5f6f7;
   color: var(--ink);
   text-align: center;
-  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
-  border-bottom: 2px solid var(--ink);
-  box-shadow: inset 0 0 0 1px rgba(11,12,15,.12);
-  animation: center-enter .72s cubic-bezier(.2,.75,.2,1) both;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 100%, 0 100%);
+  animation: center-enter .7s cubic-bezier(.2, .75, .2, 1) .12s both;
+}
+
+.center-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 4);
+  padding-bottom: calc(var(--u) * 4);
 }
 
 .center-tournament {
-  align-self: end;
-  padding: 0 12%;
-  font-size: .58vw;
-  font-weight: 950;
-  letter-spacing: .09em;
+  max-width: 100%;
+  font-size: calc(var(--u) * 14);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .1em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .center-match {
-  align-self: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .55vw;
-  font-size: .55vw;
+  gap: calc(var(--u) * 12);
+  max-width: 100%;
+  font-size: calc(var(--u) * 20);
   font-weight: 900;
-  letter-spacing: .05em;
+  line-height: 1;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+.center-match span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .center-match i {
-  width: 1px;
-  height: .65vw;
-  background: #9da3aa;
+  flex: 0 0 auto;
+  width: calc(var(--u) * 2);
+  height: calc(var(--u) * 20);
+  background: #9aa0a8;
 }
 
-.center-match strong { font-size: .62vw }
+.center-match strong { flex: 0 0 auto; font-weight: 900 }
 
 .center-format {
-  align-self: start;
-  color: #777d85;
-  font-size: .42vw;
+  color: #6f757d;
+  font-size: calc(var(--u) * 12);
   font-weight: 900;
-  letter-spacing: .16em;
+  line-height: 1;
+  letter-spacing: .18em;
 }
 
-@keyframes gameplay-enter {
-  from { opacity: 0; transform: translateY(-85%) }
-  to { opacity: 1; transform: translateY(0) }
+/* game-win pips live in the centre, flanking the match info */
+.game-win-row {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 4);
+  padding-bottom: calc(var(--u) * 4);
+}
+
+.p1-win-row { justify-content: flex-end; padding-right: calc(var(--u) * 4); padding-left: calc(var(--u) * 8) }
+.p2-win-row { justify-content: flex-start; padding-left: calc(var(--u) * 4); padding-right: calc(var(--u) * 8) }
+
+.win-marker {
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 15);
+  background: rgba(11, 12, 15, .16);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  transition: background-color .22s ease, transform .22s ease;
+}
+
+.p1-win-row .win-marker.won { background: var(--red) }
+.p2-win-row .win-marker.won { background: var(--blue) }
+
+.win-marker.won { animation: win-pop .36s cubic-bezier(.2, .8, .2, 1) }
+
+/* ---- entrance choreography (runs whenever the gameplay state is shown) ---- */
+.gameplay-one { animation: slide-from-left .62s cubic-bezier(.2, .75, .2, 1) both }
+.gameplay-two { animation: slide-from-right .62s cubic-bezier(.2, .75, .2, 1) both }
+
+.player-copy strong,
+.gameplay-score span {
+  animation: reveal .5s cubic-bezier(.2, .75, .2, 1) .3s both
+}
+
+@keyframes slide-from-left {
+  from { opacity: 0; transform: translateX(calc(var(--u) * -90)) }
+  to { opacity: 1; transform: none }
+}
+
+@keyframes slide-from-right {
+  from { opacity: 0; transform: translateX(calc(var(--u) * 90)) }
+  to { opacity: 1; transform: none }
 }
 
 @keyframes center-enter {
-  from { opacity: 0; transform: translateY(-20%) scaleX(.88) }
+  from { opacity: 0; transform: translateY(calc(var(--u) * -24)) }
   to { opacity: 1; transform: none }
+}
+
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(calc(var(--u) * 8)) }
+  to { opacity: 1; transform: none }
+}
+
+@keyframes score-bump {
+  0% { transform: scale(1) }
+  35% { transform: scale(1.35) }
+  100% { transform: scale(1) }
 }
 
 @keyframes win-pop {
   0% { transform: scale(.25) rotate(-18deg); opacity: 0 }
-  70% { transform: scale(1.18) rotate(4deg); opacity: 1 }
+  70% { transform: scale(1.2) rotate(4deg); opacity: 1 }
   100% { transform: scale(1); opacity: 1 }
 }
 

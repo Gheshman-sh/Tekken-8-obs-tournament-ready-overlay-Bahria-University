@@ -20,37 +20,152 @@
     <section class="state state-gameplay">
       <div class="gameplay-board" aria-label="Active match scoreboard">
         <div class="gameplay-player gameplay-one">
-          <div class="player-identity">
+          <div class="gameplay-name">
             <span class="player-side">P1</span>
             <div class="player-copy">
               <strong data-bind="p1Name"></strong>
-              <small data-bind="p1Character"></small>
             </div>
           </div>
-          <div class="game-win-row p1-win-row" data-score-row="p1" aria-label="Player 1 game wins"></div>
           <div class="gameplay-score p1-score"><span data-bind="p1Score"></span></div>
         </div>
 
         <div class="gameplay-center">
-          <span class="center-tournament" data-bind="tournament"></span>
-          <div class="center-match">
-            <span data-bind="round"></span>
-            <i></i>
-            <strong data-bind="game"></strong>
+          <div class="game-win-row p1-win-row" data-score-row="p1" aria-label="Player 1 game wins"></div>
+          <div class="center-info">
+            <span class="center-tournament" data-bind="tournament"></span>
+            <div class="center-match">
+              <span data-bind="round"></span>
+              <i></i>
+              <strong data-bind="game"></strong>
+            </div>
+            <span class="center-format" data-bind="matchFormat"></span>
           </div>
-          <span class="center-format" data-bind="matchFormat"></span>
+          <div class="game-win-row p2-win-row" data-score-row="p2" aria-label="Player 2 game wins"></div>
         </div>
 
         <div class="gameplay-player gameplay-two">
-          <div class="gameplay-score p2-score"><span data-bind="p2Score"></span></div>
-          <div class="game-win-row p2-win-row" data-score-row="p2" aria-label="Player 2 game wins"></div>
-          <div class="player-identity">
+          <div class="gameplay-name">
+            <span class="player-side">P2</span>
             <div class="player-copy">
               <strong data-bind="p2Name"></strong>
-              <small data-bind="p2Character"></small>
             </div>
-            <span class="player-side">P2</span>
           </div>
+          <div class="gameplay-score p2-score"><span data-bind="p2Score"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="state state-intro">
+      <div class="intro-heading"><span data-bind="tournament"></span><small><span data-bind="round"></span> · <span
+            data-bind="roundTime"></span> · <span data-bind="game"></span></small></div>
+      <div class="intro-players">
+        <div class="intro-player intro-one"><span class="micro-label">PLAYER 1</span><strong
+            data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
+        <div class="intro-vs">VS</div>
+        <div class="intro-player intro-two"><span class="micro-label">PLAYER 2</span><strong
+            data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
+      </div>
+    </section>
+
+    <section class="state state-transition">
+      <span class="micro-label">NEXT GAME</span><strong data-bind="round"></strong>
+      <div class="transition-score"><span data-bind="p1Name"></span><b data-bind="p1Score"></b><i>—</i><b
+          data-bind="p2Score"></b><span data-bind="p2Name"></span></div><small data-bind="game"></small>
+    </section>
+
+    <section class="state state-winner">
+      <span class="micro-label">MATCH COMPLETE</span><strong class="winner-label">WINNER</strong><b class="winner-name"
+        data-bind="winnerName"></b><small><span data-bind="winnerCharacter"></span> · <span
+          data-bind="round"></span></small>
+      <div class="winner-score"><span data-bind="p1Score"></span> — <span data-bind="p2Score"></span></div>
+    </section>
+
+    <section class="state state-standby">
+      <span class="micro-label">BAHRIA UNIVERSITY ESPORTS</span><strong>SHOWDOWN</strong><small>TOURNAMENT
+        STANDBY</small>
+    </section>
+
+    <section class="state state-special-guest">
+      <div class="guest-accent"></div>
+      <div class="guest-content">
+        <span class="micro-label">SPECIAL GUEST</span>
+        <strong class="guest-name" data-bind="guestName"></strong>
+        <span class="guest-title" data-bind="guestTitle"></span>
+        <span class="guest-organization" data-bind="guestOrganization"></span>
+        <small class="guest-subtitle" data-bind="guestSubtitle"></small>
+      </div>
+      <div class="guest-photo-frame"><img class="guest-photo" data-bind-src="guestPhoto" alt=""></div>
+      <div class="guest-branding" data-bind="tournament"></div>
+    </section>
+
+    <section class="state state-replay-intro">
+      <span class="replay-intro-kicker">BAHRIA UNIVERSITY ESPORTS SHOWDOWN</span>
+      <strong>INSTANT REPLAY</strong>
+      <span class="replay-intro-subtitle">PREVIOUS MOMENT</span>
+      <span class="replay-intro-line"></span>
+      <small>REPLAY INCOMING</small>
+    </section>
+
+    <video id="replay-video" class="replay-video" playsinline muted preload="auto"
+      controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture></video>
+    <div class="replay-badge">INSTANT REPLAY</div>
+  </main>
+  <script src="/js/overlay.js"></script>
+</body>
+
+</html><!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bahria University Esports Showdown</title>
+  <link rel="stylesheet" href="/css/overlay.css">
+</head>
+
+<body>
+  <main id="overlay" class="overlay" data-mode="gameplay">
+    <header class="topline">
+      <div class="brand"><span class="micro-label">BAHRIA UNIVERSITY</span><strong data-bind="tournament"></strong>
+      </div>
+      <div class="match-meta"><span data-bind="round"></span><i></i><span data-bind="roundTime"></span><i></i><span
+          data-bind="game"></span></div>
+    </header>
+
+    <section class="state state-gameplay">
+      <div class="gameplay-board" aria-label="Active match scoreboard">
+        <div class="gameplay-player gameplay-one">
+          <div class="gameplay-name">
+            <span class="player-side">P1</span>
+            <div class="player-copy">
+              <strong data-bind="p1Name"></strong>
+            </div>
+          </div>
+          <div class="gameplay-score p1-score"><span data-bind="p1Score"></span></div>
+        </div>
+
+        <div class="gameplay-center">
+          <div class="game-win-row p1-win-row" data-score-row="p1" aria-label="Player 1 game wins"></div>
+          <div class="center-info">
+            <span class="center-tournament" data-bind="tournament"></span>
+            <div class="center-match">
+              <span data-bind="round"></span>
+              <i></i>
+              <strong data-bind="game"></strong>
+            </div>
+            <span class="center-format" data-bind="matchFormat"></span>
+          </div>
+          <div class="game-win-row p2-win-row" data-score-row="p2" aria-label="Player 2 game wins"></div>
+        </div>
+
+        <div class="gameplay-player gameplay-two">
+          <div class="gameplay-name">
+            <span class="player-side">P2</span>
+            <div class="player-copy">
+              <strong data-bind="p2Name"></strong>
+            </div>
+          </div>
+          <div class="gameplay-score p2-score"><span data-bind="p2Score"></span></div>
         </div>
       </div>
     </section>
