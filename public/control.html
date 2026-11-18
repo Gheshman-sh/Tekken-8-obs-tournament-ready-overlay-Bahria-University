@@ -14,15 +14,25 @@
     <section class="workspace">
       <section class="preview-panel panel">
         <div class="section-heading">
-          <div><span class="eyebrow">LIVE PREVIEW</span><h2 id="preview-title">Connecting OBS Program…</h2></div>
-          <div class="preview-actions"><span id="preview-health" class="status offline">Connecting</span><button id="refresh-preview" class="icon-button" title="Reconnect live preview" aria-label="Reconnect live preview">↻</button></div>
+          <div><span class="eyebrow">LIVE PREVIEW</span><h2 id="preview-title">YouTube broadcast</h2></div>
+          <div class="preview-actions"><span id="preview-health" class="status offline">Not configured</span><button id="refresh-preview" class="icon-button" title="Reconnect YouTube preview" aria-label="Reconnect YouTube preview">↻</button></div>
         </div>
         <div class="preview-frame" aria-live="polite">
-          <video id="obs-live-preview" muted autoplay playsinline controlslist="nodownload nofullscreen noremoteplayback"></video>
+          <div id="youtube-preview-player"></div>
           <button id="preview-fullscreen" class="preview-fullscreen" type="button" aria-label="Enter fullscreen preview" title="Fullscreen preview">⛶</button>
-          <span id="preview-empty" class="preview-empty">Connecting live OBS Program preview…</span>
+          <span id="preview-empty" class="preview-empty">Paste a YouTube livestream URL to show the broadcast preview.</span>
         </div>
-        <div class="preview-footer"><span id="preview-description">Waiting for OBS RTMP preview stream</span><span id="preview-state">State: loading…</span><span id="network-addresses">LAN: loading…</span></div>
+        <div class="youtube-preview-config">
+          <label>YouTube Live URL
+            <input id="youtube-preview-url" type="url" placeholder="https://www.youtube.com/watch?v=VIDEO_ID" autocomplete="off">
+          </label>
+          <div class="button-row">
+            <button id="youtube-preview-load" class="button primary small" type="button">Load</button>
+            <button id="youtube-preview-clear" class="button secondary small" type="button">Clear</button>
+            <a id="youtube-open-link" class="button secondary small" href="#" target="_blank" rel="noopener" hidden>Open on YouTube</a>
+          </div>
+        </div>
+        <div class="preview-footer"><span id="preview-description">YouTube broadcast preview · No OBS preview infrastructure</span><span id="preview-state">State: not configured</span><span id="network-addresses">LAN: loading…</span></div>
       </section>
       <aside class="control-panel">
         <section class="panel"><div class="section-heading"><div><span class="eyebrow">MATCH</span><h2>Information</h2></div></div><label>Tournament name<input data-path="tournamentName"></label><div class="two-col"><label>Round<input data-path="roundName"></label><label>Round time (seconds)<input type="number" min="1" max="999" data-path="roundTime"></label></div><div class="two-col"><label>Game number<input type="number" min="1" data-path="gameNumber"></label><label>Match format<input data-path="matchFormat" placeholder="e.g. BEST OF 5"></label></div><label>Notes<input data-path="notes"></label></section>

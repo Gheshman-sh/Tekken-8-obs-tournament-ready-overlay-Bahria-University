@@ -60,19 +60,11 @@ The control panel is available at `http://localhost:3000/control`. The overlay i
 
 ## OBS setup
 
-### Real-time OBS Program preview
+### YouTube broadcast preview
 
-The control panel preview is a WebRTC stream of the actual OBS Program output. It uses a local MediaMTX relay that is downloaded and started by the Node server on the first Windows run.
+Paste a public YouTube livestream URL into the control panel's Live Preview section, then click **Load**. The preview uses YouTube's official IFrame Player API and is not a separate OBS capture or local transcoder.
 
-1. In OBS, open **Settings > Stream**.
-2. Select **Custom** as the service.
-3. Set the server to `rtmp://127.0.0.1:1935/preview`.
-4. Set the stream key to `preview`.
-5. Start streaming.
-
-This custom RTMP destination is a private localhost-only monitoring relay. It does not publish to an internet streaming service. The control panel receives it through WebRTC on the existing LAN port `3000`.
-
-The OBS encoder creates the preview stream, so configure OBS output resolution and frame rate normally. The relay adds no second OBS scene or browser mockup. Because OBS encodes for this preview, use a suitable OBS canvas/output setting and stop the custom preview stream when it is not needed.
+Supported link formats include `youtube.com/watch?v=VIDEO_ID`, `youtu.be/VIDEO_ID`, `youtube.com/live/VIDEO_ID`, and `youtube.com/embed/VIDEO_ID`. The video ID is saved locally and restored after a control-panel refresh.
 
 ### 1. Enable OBS WebSocket
 

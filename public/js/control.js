@@ -122,10 +122,9 @@
     return 'OBS reported a connection or status error. Check the OBS WebSocket settings and try again.';
   }
   function renderObs(obs) { const status = document.getElementById('obs-status'); const feedback = document.getElementById('obs-feedback'); const error = obs.error ? formatObsError(obs.error) : ''; const replayUnavailable = /replay buffer.*(not available|unavailable)/i.test(obs.error || ''); status.textContent = obs.connected ? 'Connected' : 'Disconnected'; status.className = `status-text ${obs.connected ? 'online-text' : 'offline-text'}`; feedback.textContent = obs.connected ? error ? `Connected, but: ${error}` : 'OBS WebSocket connected.' : error ? `Connection failed: ${error}` : 'Not connected to OBS.'; feedback.className = `obs-feedback ${obs.connected ? error ? 'warning-text' : 'online-text' : error ? 'offline-text' : ''}`; document.getElementById('replay-buffer').textContent = replayUnavailable ? 'Unavailable' : obs.replayBufferActive ? 'Running' : 'Stopped'; document.getElementById('stream-status').textContent = obs.streaming ? 'Live' : 'Offline'; document.getElementById('record-status').textContent = obs.recording ? 'Recording' : 'Stopped'; if (error) notify(error, true); }
-  let previewPeer = null;
-  let previewReconnectTimer = 0;
-  let previewReconnectDelay = 1500;
-  let previewStatusTimer = 0;
+  let youtubePlayer = null;
+  let youtubeVideoId = '';
+  let youtubeApiLoaded = false;
   function setPreviewStatus(kind, title, description) {
     const health = document.getElementById('preview-health');
     const empty = document.getElementById('preview-empty');
@@ -133,80 +132,102 @@
     health.className = `status ${kind === 'Live' ? 'online' : kind === 'Connecting' ? 'info' : 'offline'}`;
     document.getElementById('preview-title').textContent = title;
     document.getElementById('preview-description').textContent = description;
-    empty.hidden = kind === 'Live';
+    empty.hidden = kind === 'Live' || kind === 'Buffering' || kind === 'Paused' || kind === 'Playing';
   }
-  async function waitForIceGathering(peer) {
-    if (peer.iceGatheringState === 'complete') return;
-    await new Promise(resolve => {
-      const timeout = setTimeout(resolve, 2500);
-      peer.addEventListener('icegatheringstatechange', () => {
-        if (peer.iceGatheringState === 'complete') { clearTimeout(timeout); resolve(); }
-      });
+  function loadYouTubeApi() {
+    if (youtubeApiLoaded || window.YT && window.YT.Player) return Promise.resolve();
+    youtubeApiLoaded = true;
+    return new Promise(resolve => {
+      window.onYouTubeIframeAPIReady = () => resolve();
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.onerror = () => setPreviewStatus('Connection error', 'YouTube preview unavailable', 'The YouTube IFrame API could not be loaded.');
+      document.head.appendChild(script);
     });
   }
-  async function connectPreview() {
-    clearTimeout(previewReconnectTimer);
-    if (previewPeer) {
-      previewPeer.close();
-      previewPeer = null;
+  async function createYouTubePreview(videoId) {
+    await loadYouTubeApi();
+    const openLink = document.getElementById('youtube-open-link');
+    openLink.href = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    openLink.hidden = false;
+    setPreviewStatus('Connecting', 'YouTube broadcast', 'Loading and validating the livestream');
+    document.getElementById('preview-empty').hidden = true;
+    if (youtubePlayer) {
+      youtubePlayer.loadVideoById(videoId);
+      return;
     }
-    setPreviewStatus('Connecting', 'Connecting OBS Program…', 'Waiting for the LAN WebRTC preview stream');
-    try {
-      const statusResponse = await fetch('/api/preview/status', { cache: 'no-store' });
-      const status = await statusResponse.json();
-      if (!statusResponse.ok || !status.relay.running) throw new Error('Preview relay is not running.');
-      if (!status.relay.ready) throw new Error('OBS has not started publishing the preview stream.');
-
-      const peer = new RTCPeerConnection();
-      previewPeer = peer;
-      peer.addTransceiver('video', { direction: 'recvonly' });
-      peer.addTransceiver('audio', { direction: 'recvonly' });
-      peer.addEventListener('track', event => {
-        const video = document.getElementById('obs-live-preview');
-        video.srcObject = event.streams[0] || new MediaStream([event.track]);
-        video.play().catch(() => {});
-        setPreviewStatus('Live', 'OBS Program', '1920 × 1080 · Live LAN preview');
-        previewReconnectDelay = 1500;
-      });
-      peer.addEventListener('connectionstatechange', () => {
-        if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed') schedulePreviewReconnect();
-      });
-
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      await waitForIceGathering(peer);
-      const response = await fetch('/api/preview/whep', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/sdp', 'Accept': 'application/sdp' },
-        body: peer.localDescription.sdp
-      });
-      if (!response.ok) throw new Error(await response.text() || 'WebRTC preview negotiation failed.');
-      const answer = await response.text();
-      await peer.setRemoteDescription({ type: 'answer', sdp: answer });
-    } catch (error) {
-      setPreviewStatus('Disconnected', 'OBS Program unavailable', error.message);
-      schedulePreviewReconnect();
-    }
+    youtubePlayer = new YT.Player('youtube-preview-player', {
+      videoId,
+      width: '100%',
+      height: '100%',
+      playerVars: { autoplay: 1, mute: 1, playsinline: 1, rel: 0, modestbranding: 1 },
+      events: {
+        onReady: event => {
+          event.target.mute();
+          event.target.playVideo();
+        },
+        onStateChange: event => {
+          if (event.data === YT.PlayerState.BUFFERING) setPreviewStatus('Buffering', 'YouTube broadcast', 'Buffering the livestream');
+          else if (event.data === YT.PlayerState.PLAYING) setPreviewStatus('Playing', 'YouTube broadcast', 'Live YouTube broadcast preview');
+          else if (event.data === YT.PlayerState.PAUSED) setPreviewStatus('Paused', 'YouTube broadcast', 'Playback paused');
+          else if (event.data === YT.PlayerState.ENDED) setPreviewStatus('Connection error', 'YouTube broadcast ended', 'The configured livestream has ended.');
+        },
+        onError: event => {
+          const messages = {
+            2: 'The video ID is invalid.',
+            5: 'The HTML5 player cannot play this video.',
+            100: 'The video is private or unavailable.',
+            101: 'The owner disabled embedding.',
+            150: 'Embedding is disabled or unavailable.'
+          };
+          setPreviewStatus('Connection error', 'YouTube preview unavailable', messages[event.data] || 'YouTube could not load this livestream.');
+        }
+      }
+    });
   }
-  function schedulePreviewReconnect() {
-    clearTimeout(previewReconnectTimer);
-    previewReconnectTimer = setTimeout(connectPreview, previewReconnectDelay);
-    previewReconnectDelay = Math.min(previewReconnectDelay * 1.5, 10000);
-  }
-  async function pollPreviewStatus() {
+  async function loadSavedYouTubePreview() {
     try {
-      const response = await fetch('/api/preview/status', { cache: 'no-store' });
-      const status = await response.json();
-      if (!status.relay.running) {
-        setPreviewStatus('Disconnected', 'Preview relay stopped', 'Restart the tournament server to restore the relay');
-      } else if (!status.relay.ready) {
-        if (previewPeer && previewPeer.connectionState === 'connected') return;
-        setPreviewStatus('Connecting', 'Waiting for OBS Program', 'Configure OBS to publish rtmp://127.0.0.1:1935/preview');
-      } else if (!previewPeer || previewPeer.connectionState !== 'connected') {
-        connectPreview();
+      const response = await fetch('/api/youtube-preview');
+      const saved = await response.json();
+      document.getElementById('youtube-preview-url').value = saved.url || '';
+      if (saved.videoId) {
+        youtubeVideoId = saved.videoId;
+        await createYouTubePreview(saved.videoId);
+      } else {
+        setPreviewStatus('Not configured', 'YouTube broadcast', 'Paste a YouTube livestream URL to configure the preview');
       }
     } catch (error) {
-      setPreviewStatus('Disconnected', 'Preview disconnected', 'The local preview service is unreachable');
+      setPreviewStatus('Connection error', 'Preview settings unavailable', 'The saved YouTube preview could not be restored.');
+    }
+  }
+  async function configureYouTubePreview() {
+    const input = document.getElementById('youtube-preview-url');
+    setPreviewStatus('Connecting', 'YouTube broadcast', 'Saving and validating the livestream');
+    try {
+      const response = await fetch('/api/youtube-preview', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input.value })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      youtubeVideoId = data.videoId;
+      await createYouTubePreview(data.videoId);
+      notify('YouTube preview loaded.', 'success');
+    } catch (error) {
+      setPreviewStatus('Connection error', 'Invalid YouTube preview', friendlyError(error.message));
+    }
+  }
+  async function clearYouTubePreview() {
+    try {
+      await fetch('/api/youtube-preview', { method: 'DELETE' });
+      if (youtubePlayer && typeof youtubePlayer.stopVideo === 'function') youtubePlayer.stopVideo();
+      youtubeVideoId = '';
+      document.getElementById('youtube-preview-url').value = '';
+      document.getElementById('youtube-open-link').hidden = true;
+      setPreviewStatus('Not configured', 'YouTube broadcast', 'Paste a YouTube livestream URL to configure the preview');
+    } catch (error) {
+      notify('The YouTube preview could not be cleared.', 'error');
     }
   }
   async function connectObs() {
@@ -512,7 +533,12 @@
   document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));
   document.querySelectorAll('[data-timer-action]').forEach(button => button.onclick = () => action('/api/broadcast/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.timerAction }) }, 'Broadcast timer updated.', button));
-  document.getElementById('refresh-preview').onclick = () => connectPreview();
+  document.getElementById('refresh-preview').onclick = () => {
+    if (youtubeVideoId) createYouTubePreview(youtubeVideoId).catch(error => setPreviewStatus('Connection error', 'YouTube preview unavailable', error.message));
+    else setPreviewStatus('Not configured', 'YouTube broadcast', 'Paste a YouTube livestream URL to configure the preview');
+  };
+  document.getElementById('youtube-preview-load').onclick = configureYouTubePreview;
+  document.getElementById('youtube-preview-clear').onclick = clearYouTubePreview;
   document.getElementById('preview-fullscreen').onclick = () => {
     const frame = document.querySelector('.preview-frame');
     if (document.fullscreenElement) document.exitFullscreen();
@@ -556,8 +582,6 @@
     };
   }
   connectControlSocket();
-  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); }).catch(error => notify(friendlyError(error.message), 'error'));
-  connectPreview();
-  previewStatusTimer = setInterval(pollPreviewStatus, 3000);
+  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); loadSavedYouTubePreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
   setInterval(updateTimerDisplay, 250);
 }());
