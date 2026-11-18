@@ -583,5 +583,57 @@
   }
   connectControlSocket();
   Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); loadSavedYouTubePreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
+  const previewPanel = document.querySelector('.preview-panel');
+  let previewStuck = false;
+  let previewPlaceholder = null;
+  let previewNaturalRect = null;
+  let previewOriginalDocumentTop = null;
+  function updatePreviewStickyState() {
+    if (window.innerWidth <= 1000) {
+      if (previewPlaceholder) previewPlaceholder.remove();
+      previewPlaceholder = null;
+      previewPanel.style.removeProperty('position');
+      previewPanel.style.removeProperty('top');
+      previewPanel.style.removeProperty('left');
+      previewPanel.style.removeProperty('width');
+      previewPanel.classList.remove('is-sticky');
+      previewStuck = false;
+      previewOriginalDocumentTop = null;
+      return;
+    }
+    if (previewOriginalDocumentTop == null) {
+      const rect = previewPanel.getBoundingClientRect();
+      previewOriginalDocumentTop = rect.top + window.scrollY;
+    }
+    const stuck = window.scrollY + 16 >= previewOriginalDocumentTop;
+    if (!stuck && previewStuck) {
+      if (previewPlaceholder) previewPlaceholder.remove();
+      previewPlaceholder = null;
+      previewPanel.style.removeProperty('position');
+      previewPanel.style.removeProperty('top');
+      previewPanel.style.removeProperty('left');
+      previewPanel.style.removeProperty('width');
+      previewNaturalRect = null;
+    }
+    if (stuck !== previewStuck) {
+      previewStuck = stuck;
+      previewPanel.classList.toggle('is-sticky', stuck);
+      if (stuck) {
+        previewNaturalRect = previewPanel.getBoundingClientRect();
+        previewPlaceholder = document.createElement('div');
+        previewPlaceholder.className = 'preview-placeholder';
+        previewPlaceholder.style.width = `${previewNaturalRect.width}px`;
+        previewPlaceholder.style.height = `${previewNaturalRect.height}px`;
+        previewPanel.parentNode.insertBefore(previewPlaceholder, previewPanel);
+        previewPanel.style.position = 'fixed';
+        previewPanel.style.top = '16px';
+        previewPanel.style.left = `${previewNaturalRect.left}px`;
+        previewPanel.style.width = `${previewNaturalRect.width}px`;
+      }
+    }
+  }
+  window.addEventListener('scroll', updatePreviewStickyState, { passive: true });
+  window.addEventListener('resize', updatePreviewStickyState);
+  updatePreviewStickyState();
   setInterval(updateTimerDisplay, 250);
 }());
