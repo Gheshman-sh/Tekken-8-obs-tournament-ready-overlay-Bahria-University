@@ -19,12 +19,29 @@ const PORT = Number(process.env.PORT) || 3000;
 const defaultState = {
   tournamentName: 'BAHRIA UNIVERSITY ESPORTS SHOWDOWN',
   roundName: 'Winners Final',
-  format: 'First to 3',
+  roundTime: '60',
   gameNumber: 1,
+  matchFormat: 'BEST OF 5',
   notes: '',
   player1: { name: 'Player 1', character: '', score: 0 },
   player2: { name: 'Player 2', character: '', score: 0 },
-  broadcast: { mode: 'gameplay', winner: null, timer: null },
+  broadcast: { mode: 'gameplay', winner: null, timer: null, previousMode: null },
+  specialGuest: { name: '', title: '', organization: '', subtitle: '', photo: '' },
+  transitionSettings: {
+    preset: 'cinematic',
+    duration: 700,
+    easing: 'cubic-bezier(.22,.61,.36,1)',
+    entrance: 'zoom-in',
+    exit: 'fade'
+  },
+  transitionOverrides: {
+    gameplay: null,
+    match_intro: null,
+    game_transition: null,
+    winner: null,
+    standby: null,
+    special_guest: null
+  },
   broadcastTimers: {
     match_intro: { enabled: true, duration: 8, nextMode: 'gameplay' },
     game_transition: { enabled: true, duration: 4, nextMode: 'gameplay' },
@@ -66,6 +83,9 @@ function mergeState(saved) {
     player2: { ...defaultState.player2, ...(saved.player2 || {}) },
     settings: { ...defaultState.settings, ...(saved.settings || {}) },
     broadcast: { ...defaultState.broadcast, ...(saved.broadcast || {}) },
+    specialGuest: { ...defaultState.specialGuest, ...(saved.specialGuest || {}) },
+    transitionSettings: { ...defaultState.transitionSettings, ...(saved.transitionSettings || {}) },
+    transitionOverrides: { ...defaultState.transitionOverrides, ...(saved.transitionOverrides || {}) },
     broadcastTimers: {
       ...defaultState.broadcastTimers,
       ...(saved.broadcastTimers || {}),
@@ -85,8 +105,8 @@ let replaySequence = 0;
 let replayOperation = { status: 'idle', preset: null, message: '', busy: false };
 let replaySaveWaiter;
 let broadcastTimer;
-const broadcastModes = new Set(['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'replay_intro', 'replay']);
-const timerActions = new Set(['skip', 'extend', 'cancel', 'gameplay']);
+const broadcastModes = new Set(['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'special_guest', 'replay_intro', 'replay']);
+const timerActions = new Set(['skip', 'extend', 'cancel', 'gameplay', 'previous']);
 function publicReplays() {
   return replays.map(replay => ({ ...replay, available: Boolean(replay.filePath && fs.existsSync(path.resolve(replay.filePath))) }));
 }
@@ -100,6 +120,7 @@ const obsStatus = { connected: false, replayBufferActive: false, recording: fals
 
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(ROOT, 'public')));
+app.get('/vendor/htmx.min.js', (req, res) => res.sendFile(path.join(ROOT, 'node_modules', 'htmx.org', 'dist', 'htmx.min.js')));
 app.get('/', (req, res) => res.redirect('/control'));
 app.get('/control', (req, res) => res.sendFile(path.join(ROOT, 'public', 'control.html')));
 app.get('/overlay', (req, res) => res.sendFile(path.join(ROOT, 'public', 'overlay.html')));
@@ -131,6 +152,27 @@ app.get('/api/obs/preview', async (req, res) => {
     res.status(502).json({ error: `OBS preview failed: ${error.message}` });
   }
 });
+app.get('/api/obs/preview/htmx', async (req, res) => {
+  if (!obsStatus.connected) {
+    res.set('X-OBS-Preview', 'disconnected');
+    return res.send('<iframe class="preview-fallback" src="/overlay?preview=1" title="Transparent tournament overlay preview"></iframe>');
+  }
+  try {
+    const scene = await obsRequest('GetCurrentProgramScene');
+    const screenshot = await obsRequest('GetSourceScreenshot', {
+      sourceName: scene.currentProgramSceneName,
+      imageFormat: 'png',
+      imageWidth: 960,
+      imageHeight: 540,
+      imageCompressionQuality: 80
+    });
+    res.set('X-OBS-Scene', scene.currentProgramSceneName);
+    res.send(`<img class="htmx-preview-image" alt="OBS Program preview" src="${screenshot.imageData}">`);
+  } catch (error) {
+    res.set('X-OBS-Preview', 'error');
+    return res.send('<iframe class="preview-fallback" src="/overlay?preview=1" title="Transparent tournament overlay preview"></iframe>');
+  }
+});
 
 function publicState() {
   const broadcast = { ...state.broadcast };
@@ -149,6 +191,15 @@ function persistAndBroadcast() {
 function setBroadcastMode(mode, winner = null, duration = 0, nextMode = 'gameplay', enabled = true) {
   if (!broadcastModes.has(mode)) throw new Error('Unknown broadcast mode.');
   clearTimeout(broadcastTimer);
+  const currentBroadcast = state.broadcast || {};
+  let previousMode = currentBroadcast.previousMode || null;
+  if (mode === 'special_guest' && currentBroadcast.mode !== 'special_guest') {
+    previousMode = currentBroadcast.mode || 'gameplay';
+  } else if (mode === 'standby' && currentBroadcast.mode === 'special_guest') {
+    previousMode = previousMode || 'gameplay';
+  } else if (mode !== 'special_guest') {
+    previousMode = mode === 'gameplay' ? null : previousMode;
+  }
   const safeWinner = winner === 2 ? 2 : winner === 1 ? 1 : null;
   const safeDuration = Math.max(0, Number(duration) || 0);
   const timer = safeDuration > 0 && enabled && state.settings.autoReturn !== false ? {
@@ -158,7 +209,7 @@ function setBroadcastMode(mode, winner = null, duration = 0, nextMode = 'gamepla
     startedAt: Date.now(),
     endsAt: Date.now() + safeDuration * 1000
   } : null;
-  state.broadcast = { mode, winner: safeWinner, timer };
+  state.broadcast = { mode, winner: safeWinner, timer, previousMode };
   persistAndBroadcast();
   if (timer) scheduleBroadcastTimer();
 }
@@ -262,7 +313,7 @@ app.put('/api/state', (req, res) => {
   persistAndBroadcast();
   res.json({ state: publicState() });
 });
-app.post('/api/broadcast/:mode(gameplay|match_intro|game_transition|winner|standby|replay)', (req, res) => {
+app.post('/api/broadcast/:mode(gameplay|match_intro|game_transition|winner|standby|special_guest|replay)', (req, res) => {
   const mode = req.params.mode;
   const winner = Number(req.body && req.body.winner);
   const configured = state.broadcastTimers[mode];
@@ -281,6 +332,10 @@ app.post('/api/broadcast/action', (req, res) => {
   if (!timerActions.has(action)) return res.status(400).json({ error: 'Unknown broadcast timer action.' });
   if (action === 'gameplay') {
     setBroadcastMode('gameplay');
+  } else if (action === 'previous') {
+    setBroadcastMode(state.broadcast.previousMode && broadcastModes.has(state.broadcast.previousMode)
+      ? state.broadcast.previousMode
+      : 'gameplay');
   } else if (action === 'skip') {
     setBroadcastMode(state.broadcast.timer ? state.broadcast.timer.nextMode : 'gameplay');
   } else if (action === 'cancel') {
@@ -295,6 +350,16 @@ app.post('/api/broadcast/action', (req, res) => {
     scheduleBroadcastTimer();
   }
   res.json({ state: publicState() });
+});
+
+app.post('/api/broadcast/preview', (req, res) => {
+  broadcast({
+    type: 'transitionPreview',
+    preset: String(req.body && req.body.preset || 'cinematic'),
+    duration: Number(req.body && req.body.duration || state.transitionSettings.duration || 700),
+    easing: String(req.body && req.body.easing || state.transitionSettings.easing || 'cubic-bezier(.22,.61,.36,1)')
+  });
+  res.json({ ok: true });
 });
 
 app.post('/api/obs/connect', async (req, res) => {

@@ -4,6 +4,8 @@
   const notice = document.getElementById('notice');
   const paths = document.querySelectorAll('[data-path]');
   let previewRequestActive = false;
+  let saveQueue = Promise.resolve();
+  let socketReconnectTimer;
   let noticeTimer;
   let lastNotice = '';
   let lastNoticeAt = 0;
@@ -48,6 +50,7 @@
   }
   function render() {
     paths.forEach(element => {
+      if (element === document.activeElement) return;
       const value = get(state, element.dataset.path);
       if (element.classList.contains('toggle')) {
         const enabled = Boolean(value);
@@ -65,6 +68,9 @@
     document.getElementById('preview-state').textContent = `State: ${stateLabel}`;
     document.getElementById('client-count').textContent = state.connectedClients == null ? '—' : state.connectedClients;
     document.querySelectorAll('[data-broadcast]').forEach(button => button.classList.toggle('active', button.dataset.broadcast === mode));
+    document.querySelectorAll('[data-transition-state]').forEach(select => {
+      select.value = get(state.transitionOverrides || {}, select.dataset.transitionState) || '';
+    });
     document.getElementById('undo').disabled = undoStack.length === 0;
     updateTimerDisplay();
   }
@@ -74,9 +80,15 @@
     document.getElementById('broadcast-timer-remaining').textContent = remaining ? `${remaining}s → ${timer.nextMode.replace('_', ' ')}` : 'Manual';
   }
   async function save() {
-    const response = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) });
-    if (!response.ok) throw new Error((await response.json()).error || 'Unable to save state.');
-    state = (await response.json()).state; render();
+    const snapshot = JSON.stringify(state);
+    saveQueue = saveQueue.catch(() => {}).then(async () => {
+      const response = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: snapshot });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to save state.');
+      state = data.state;
+      render();
+    });
+    await saveQueue;
   }
   function snapshot() { return JSON.parse(JSON.stringify(state)); }
   function remember() { undoStack.push(snapshot()); if (undoStack.length > 20) undoStack.shift(); }
@@ -107,36 +119,39 @@
     return 'OBS reported a connection or status error. Check the OBS WebSocket settings and try again.';
   }
   function renderObs(obs) { const status = document.getElementById('obs-status'); const feedback = document.getElementById('obs-feedback'); const error = obs.error ? formatObsError(obs.error) : ''; const replayUnavailable = /replay buffer.*(not available|unavailable)/i.test(obs.error || ''); status.textContent = obs.connected ? 'Connected' : 'Disconnected'; status.className = `status-text ${obs.connected ? 'online-text' : 'offline-text'}`; feedback.textContent = obs.connected ? error ? `Connected, but: ${error}` : 'OBS WebSocket connected.' : error ? `Connection failed: ${error}` : 'Not connected to OBS.'; feedback.className = `obs-feedback ${obs.connected ? error ? 'warning-text' : 'online-text' : error ? 'offline-text' : ''}`; document.getElementById('replay-buffer').textContent = replayUnavailable ? 'Unavailable' : obs.replayBufferActive ? 'Running' : 'Stopped'; document.getElementById('stream-status').textContent = obs.streaming ? 'Live' : 'Offline'; document.getElementById('record-status').textContent = obs.recording ? 'Recording' : 'Stopped'; if (error) notify(error, true); }
-  async function refreshObsPreview(button) {
-    if (previewRequestActive) return;
-    previewRequestActive = true;
-    setButtonLoading(button, true, 'Refreshing…');
-    const image = document.getElementById('obs-preview-image');
-    const overlay = document.getElementById('preview');
+  window.updatePreviewStatus = event => {
+    const xhr = event.detail && event.detail.xhr;
     const empty = document.getElementById('preview-empty');
-    try {
-      const response = await fetch('/api/obs/preview');
-      if (!response.ok) throw new Error('OBS preview unavailable.');
-      const data = await response.json();
-      image.src = data.imageData;
-      image.hidden = false;
-      overlay.hidden = true;
+    if (!xhr) {
+      empty.hidden = false;
+      empty.textContent = 'Preview status unavailable';
+      return;
+    }
+    if (xhr.status === 200) {
+      const scene = xhr.getResponseHeader('X-OBS-Scene');
+      const previewStatus = xhr.getResponseHeader('X-OBS-Preview');
+      if (previewStatus) {
+        empty.hidden = false;
+        empty.textContent = previewStatus === 'disconnected' ? 'OBS disconnected — showing the local overlay preview' : 'OBS preview error — showing the local overlay preview';
+        document.getElementById('preview-title').textContent = 'Program overlay';
+        document.getElementById('preview-description').textContent = '1920 × 1080 transparent overlay';
+        return;
+      }
       empty.hidden = true;
       document.getElementById('preview-title').textContent = 'OBS Program';
-      document.getElementById('preview-description').textContent = data.sceneName ? `OBS Program · ${data.sceneName}` : 'OBS Program output';
-    } catch (error) {
-      notify('Preview refresh failed. Showing the overlay preview instead.', 'warning');
-      image.hidden = true;
-      image.removeAttribute('src');
-      overlay.hidden = false;
-      empty.hidden = true;
+      document.getElementById('preview-description').textContent = scene ? `OBS Program · ${scene}` : 'OBS Program output';
+    } else {
+      empty.hidden = false;
+      empty.textContent = 'OBS unavailable — showing the local overlay preview';
       document.getElementById('preview-title').textContent = 'Program overlay';
       document.getElementById('preview-description').textContent = '1920 × 1080 transparent overlay';
-    } finally {
-      previewRequestActive = false;
-      setButtonLoading(button, false);
     }
-  }
+  };
+  window.updatePreviewLoading = () => {
+    const empty = document.getElementById('preview-empty');
+    empty.hidden = false;
+    empty.textContent = 'Refreshing OBS preview…';
+  };
   async function connectObs() {
     const button = document.getElementById('obs-connect');
     const feedback = document.getElementById('obs-feedback');
@@ -236,17 +251,52 @@
     });
   }
   initializeCharacterAutocomplete();
+  document.querySelectorAll('[data-transition-state]').forEach(select => select.addEventListener('change', async () => {
+    remember();
+    if (!state.transitionOverrides) state.transitionOverrides = {};
+    state.transitionOverrides[select.dataset.transitionState] = select.value || null;
+    try { await save(); notify('State transition override saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); }
+  }));
+  document.getElementById('guest-photo-file').addEventListener('change', event => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      remember();
+      state.specialGuest = state.specialGuest || {};
+      state.specialGuest.photo = String(reader.result || '');
+      try { await save(); notify('Guest photograph saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); }
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('preview-transition').addEventListener('click', async () => {
+    await action('/api/broadcast/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preset: state.transitionSettings.preset,
+        duration: state.transitionSettings.duration,
+        easing: state.transitionSettings.easing
+      })
+    }, 'Transition preview sent.', document.getElementById('preview-transition'));
+  });
+  document.getElementById('restore-transition-defaults').addEventListener('click', async () => {
+    remember();
+    state.transitionSettings = { preset: 'cinematic', duration: 700, easing: 'cubic-bezier(.22,.61,.36,1)', entrance: 'zoom-in', exit: 'fade' };
+    state.transitionOverrides = { gameplay: null, match_intro: null, game_transition: null, winner: null, standby: null, special_guest: null };
+    try { await save(); notify('Animation settings restored.'); } catch (error) { notify(friendlyError(error.message), 'error'); }
+  });
   paths.forEach(element => element.addEventListener('change', async () => { const value = element.type === 'checkbox' ? element.checked : element.type === 'number' ? Number(element.value) : element.value; remember(); set(state, element.dataset.path, value); try { await save(); notify('Settings saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.querySelectorAll('.toggle').forEach(button => button.addEventListener('click', async () => { remember(); set(state, button.dataset.path, !get(state, button.dataset.path)); try { await save(); notify('Setting saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.querySelectorAll('[data-score-action]').forEach(button => button.addEventListener('click', async () => { const [player, delta] = button.dataset.scoreAction.split(':'); remember(); state[player].score = Math.max(0, state[player].score + Number(delta)); try { await save(); notify('Score updated.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
-  document.getElementById('swap').onclick = async () => { remember(); [state.player1, state.player2] = [state.player2, state.player1]; try { await save(); notify('Player sides swapped.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
+  document.getElementById('swap').onclick = async () => { remember();[state.player1, state.player2] = [state.player2, state.player1]; try { await save(); notify('Player sides swapped.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('next-game').onclick = async () => { remember(); state.gameNumber = Number(state.gameNumber || 1) + 1; try { await save(); notify('Next game started.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('reset-scores').onclick = async () => { remember(); state.player1.score = 0; state.player2.score = 0; try { await save(); notify('Scores reset.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('clear-match').onclick = async () => { if (!window.confirm('Clear the current match data?')) return; remember(); state.player1 = { name: '', character: '', score: 0 }; state.player2 = { name: '', character: '', score: 0 }; try { await save(); notify('Match cleared.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));
   document.querySelectorAll('[data-timer-action]').forEach(button => button.onclick = () => action('/api/broadcast/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.timerAction }) }, 'Broadcast timer updated.', button));
-  document.getElementById('refresh-preview').onclick = event => refreshObsPreview(event.currentTarget);
+  document.getElementById('refresh-preview').onclick = event => htmx.trigger(document.getElementById('obs-live-preview'), 'manualRefresh');
   document.querySelectorAll('[data-replay]').forEach(button => button.onclick = () => action(`/api/replay/${button.dataset.replay}`, { method: 'POST' }, 'Replay control updated.', button));
   document.querySelectorAll('[data-replay-preset]').forEach(button => button.onclick = () => action('/api/replay/preset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seconds: Number(button.dataset.replayPreset) }) }, `Starting ${button.dataset.replayPreset}s replay.`, button, 'Starting…'));
   document.getElementById('obs-connect').onclick = connectObs;
@@ -257,8 +307,34 @@
     if (play) action('/api/replay/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: play.dataset.play }) }, 'Replay sequence started.', play, 'Loading…');
     if (remove) action(`/api/replays/${remove.dataset.delete}`, { method: 'DELETE' }, 'Replay deleted successfully.', remove, 'Deleting…');
   };
-  const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`); socket.onmessage = event => { const message = JSON.parse(event.data); if (message.state) { state = message.state; render(); } if (message.obs) renderObs(message.obs); if (message.replays) renderReplays(message.replays); if (message.replayOperation) renderReplayOperation(message.replayOperation); };
-  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshObsPreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
-  setInterval(refreshObsPreview, 2000);
+  function connectControlSocket() {
+    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
+    socket.onopen = () => {
+      clearTimeout(socketReconnectTimer);
+      document.getElementById('save-status').textContent = 'Connected';
+    };
+    socket.onmessage = event => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.state) { state = message.state; render(); }
+        if (message.obs) renderObs(message.obs);
+        if (message.replays) renderReplays(message.replays);
+        if (message.replayOperation) renderReplayOperation(message.replayOperation);
+      } catch (error) {
+        console.error('Unable to process server update:', error);
+        notify('A server update could not be rendered.', 'error');
+      }
+    };
+    socket.onclose = () => {
+      document.getElementById('save-status').textContent = 'Reconnecting…';
+      clearTimeout(socketReconnectTimer);
+      socketReconnectTimer = setTimeout(connectControlSocket, 1505);
+    };
+    socket.onerror = () => {
+      document.getElementById('save-status').textContent = 'Connection error';
+    };
+  }
+  connectControlSocket();
+  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; }).catch(error => notify(friendlyError(error.message), 'error'));
   setInterval(updateTimerDisplay, 250);
 }());

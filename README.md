@@ -12,7 +12,7 @@ Run a live Tekken 8 tournament from a browser-based control panel, connect OBS S
 ## Features
 
 - Transparent OBS Browser Source overlay for 1920x1080 broadcasts
-- Operator scoreboard for player names, characters, round, format, game number, and set scores
+- Operator scoreboard for player names, characters, round, round time, game number, and set scores
 - Match Intro, Game Transition, Winner, Tournament Standby, Gameplay, and Replay states
 - Configurable server-controlled presentation timers
 - OBS WebSocket v5 connection and live OBS status
@@ -122,7 +122,7 @@ If the command is not recognized, install FFmpeg and add its `bin` folder to the
 
 ### Match information
 
-Update the tournament name, round, format, game number, player names, characters, and notes in the control panel. Changes synchronize to connected overlay clients.
+Update the tournament name, round, round time, game number, player names, characters, and notes in the control panel. Changes synchronize to connected overlay clients.
 
 ### Scores
 
