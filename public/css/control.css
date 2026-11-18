@@ -602,6 +602,79 @@ h2 {
     font-size: 11px
 }
 
+.system-panel .system-metrics {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    min-height: 28px;
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    border: 1px solid #343941;
+    border-radius: 4px;
+    background: #1b1d21
+}
+
+.system-panel .system-metrics span {
+    min-width: 0
+}
+
+.obs-settings {
+    overflow: hidden
+}
+
+.obs-settings .two-col {
+    margin: 10px;
+    gap: 8px
+}
+
+.obs-settings label {
+    min-width: 0
+}
+
+.obs-settings .password-field {
+    display: block;
+    margin: 0
+}
+
+.obs-settings .password-field input {
+    height: 38px
+}
+
+.obs-settings > .toggle {
+    width: calc(100% - 20px);
+    margin: 2px 10px 8px
+}
+
+.obs-settings > .button-row {
+    margin: 0 10px 10px
+}
+
+.obs-settings > .button-row .button {
+    min-width: 88px
+}
+
+.system-panel .obs-feedback {
+    min-height: 16px;
+    margin: 8px 2px
+}
+
+.system-panel .obs-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+    padding: 9px 2px 0
+}
+
+.system-panel .obs-metrics span {
+    min-width: 0;
+    line-height: 1.35
+}
+
+.system-panel .obs-metrics b {
+    white-space: nowrap
+}
+
 .system-metrics b {
     color: #e5e7eb;
     font-weight: 600
@@ -884,6 +957,27 @@ h2 {
     .advanced-actions,
     .timer-config,
     .toggle-grid {
+        grid-template-columns: 1fr
+    }
+}
+
+@media (max-width: 500px) {
+    .system-panel .obs-metrics {
+        grid-template-columns: 1fr
+        gap: 5px
+    }
+
+    .system-panel .obs-metrics span {
+        display: flex;
+        justify-content: space-between
+    }
+
+    .system-panel .system-metrics {
+        grid-template-columns: 1fr
+        gap: 5px
+    }
+
+    .obs-settings .two-col {
         grid-template-columns: 1fr
     }
 }
