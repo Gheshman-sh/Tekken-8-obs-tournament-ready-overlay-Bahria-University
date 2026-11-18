@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const OBSWebSocket = require('obs-websocket-js').default;
 
@@ -12,6 +13,8 @@ const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'tournament.json');
 const REPLAYS_FILE = path.join(DATA_DIR, 'replays.json');
+const GUEST_PROFILES_FILE = path.join(DATA_DIR, 'guest-profiles.json');
+const OBS_CREDENTIALS_FILE = path.join(DATA_DIR, 'obs-credentials.json');
 const PROCESSED_REPLAY_DIR = path.join(DATA_DIR, 'processed-replays');
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 3000;
@@ -64,6 +67,7 @@ function ensureData() {
   fs.mkdirSync(PROCESSED_REPLAY_DIR, { recursive: true });
   if (!fs.existsSync(STATE_FILE)) fs.writeFileSync(STATE_FILE, JSON.stringify(defaultState, null, 2));
   if (!fs.existsSync(REPLAYS_FILE)) fs.writeFileSync(REPLAYS_FILE, '[]');
+  if (!fs.existsSync(GUEST_PROFILES_FILE)) fs.writeFileSync(GUEST_PROFILES_FILE, '[]');
 }
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
@@ -77,6 +81,8 @@ function writeJson(file, value) {
   fs.renameSync(temporary, file);
 }
 function mergeState(saved) {
+  const sanitizedObs = { ...(saved.obs || {}) };
+  delete sanitizedObs.password;
   return {
     ...defaultState, ...saved,
     player1: { ...defaultState.player1, ...(saved.player1 || {}) },
@@ -93,12 +99,13 @@ function mergeState(saved) {
       game_transition: { ...defaultState.broadcastTimers.game_transition, ...((saved.broadcastTimers || {}).game_transition || {}) },
       winner: { ...defaultState.broadcastTimers.winner, ...((saved.broadcastTimers || {}).winner || {}) }
     },
-    obs: { ...defaultState.obs, ...(saved.obs || {}) }
+    obs: { ...defaultState.obs, ...sanitizedObs }
   };
 }
 ensureData();
 let state = mergeState(readJson(STATE_FILE, defaultState));
 let replays = readJson(REPLAYS_FILE, []);
+let guestProfiles = readJson(GUEST_PROFILES_FILE, []);
 let replayActive = false;
 let activeReplayId = null;
 let replaySequence = 0;
@@ -111,6 +118,51 @@ function publicReplays() {
   return replays.map(replay => ({ ...replay, available: Boolean(replay.filePath && fs.existsSync(path.resolve(replay.filePath))) }));
 }
 
+const OBS_CREDENTIAL_KEY_FILE = path.join(DATA_DIR, '.obs-credentials.key');
+
+function credentialKey() {
+  if (!fs.existsSync(OBS_CREDENTIAL_KEY_FILE)) {
+    fs.writeFileSync(OBS_CREDENTIAL_KEY_FILE, crypto.randomBytes(32), { mode: 0o600 });
+  }
+  const key = fs.readFileSync(OBS_CREDENTIAL_KEY_FILE);
+  return key.length === 32 ? key : crypto.createHash('sha256').update(key).digest();
+}
+
+function encryptCredential(value) {
+  if (!value) return '';
+  const key = credentialKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  return JSON.stringify({
+    iv: iv.toString('base64'),
+    content: encrypted.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64')
+  });
+}
+
+function decryptCredential(value) {
+  if (!value) return '';
+  try {
+    const payload = JSON.parse(value);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', credentialKey(), Buffer.from(payload.iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(payload.tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(payload.content, 'base64')), decipher.final()]).toString('utf8');
+  } catch (error) {
+    return '';
+  }
+}
+
+function readObsCredentials() {
+  const saved = readJson(OBS_CREDENTIALS_FILE, {});
+  return {
+    remember: Boolean(saved.remember),
+    address: saved.address || state.obs.address || '127.0.0.1',
+    port: Number(saved.port) || state.obs.port || 4455,
+    password: saved.remember && saved.passwordEncrypted ? decryptCredential(saved.passwordEncrypted) : ''
+  };
+}
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -118,7 +170,7 @@ const clients = new Set();
 const obs = new OBSWebSocket();
 const obsStatus = { connected: false, replayBufferActive: false, recording: false, streaming: false, error: '' };
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(ROOT, 'public')));
 app.get('/vendor/htmx.min.js', (req, res) => res.sendFile(path.join(ROOT, 'node_modules', 'htmx.org', 'dist', 'htmx.min.js')));
 app.get('/', (req, res) => res.redirect('/control'));
@@ -127,6 +179,55 @@ app.get('/overlay', (req, res) => res.sendFile(path.join(ROOT, 'public', 'overla
 app.get('/api/state', (req, res) => res.json({ state: publicState(), obs: obsStatus, replays: publicReplays() }));
 app.get('/api/network', (req, res) => res.json({ port: PORT, addresses: localAddresses() }));
 app.get('/api/replays', (req, res) => res.json(publicReplays()));
+app.get('/api/guest-profiles', (req, res) => res.json({ profiles: guestProfiles }));
+app.post('/api/guest-profiles', (req, res) => {
+  const profile = req.body && req.body.profile;
+  if (!profile || !String(profile.name || '').trim()) return res.status(400).json({ error: 'A guest name is required.' });
+  const id = profile.id || `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const saved = {
+    id,
+    name: String(profile.name || '').trim(),
+    title: String(profile.title || '').trim(),
+    organization: String(profile.organization || '').trim(),
+    subtitle: String(profile.subtitle || '').trim(),
+    photo: typeof profile.photo === 'string' ? profile.photo : ''
+  };
+  const index = guestProfiles.findIndex(item => item.id === id);
+  if (index >= 0) guestProfiles[index] = saved;
+  else guestProfiles.push(saved);
+  writeJson(GUEST_PROFILES_FILE, guestProfiles);
+  res.json({ profiles: guestProfiles });
+});
+app.delete('/api/guest-profiles/:id', (req, res) => {
+  guestProfiles = guestProfiles.filter(profile => profile.id !== req.params.id);
+  writeJson(GUEST_PROFILES_FILE, guestProfiles);
+  res.json({ profiles: guestProfiles });
+});
+app.get('/api/obs/credentials', (req, res) => {
+  const credentials = readObsCredentials();
+  res.json({ remember: credentials.remember, address: credentials.address, port: credentials.port });
+});
+app.put('/api/obs/credentials', (req, res) => {
+  const remember = Boolean(req.body && req.body.remember);
+  const address = String(req.body && req.body.address || '').trim();
+  const port = Number(req.body && req.body.port);
+  const password = String(req.body && req.body.password || '');
+  if (address && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    return res.status(400).json({ error: 'Enter a valid OBS port.' });
+  }
+  if (!remember) {
+    writeJson(OBS_CREDENTIALS_FILE, { remember: false, address: '', port: 4455, passwordEncrypted: '' });
+  } else {
+    const existing = readJson(OBS_CREDENTIALS_FILE, {});
+    writeJson(OBS_CREDENTIALS_FILE, {
+      remember: true,
+      address: address || existing.address || '127.0.0.1',
+      port: port || existing.port || 4455,
+      passwordEncrypted: password ? encryptCredential(password) : (existing.passwordEncrypted || '')
+    });
+  }
+  res.json({ remember, address: address || '127.0.0.1', port: port || 4455 });
+});
 app.get('/api/replays/:id/video', (req, res) => {
   const replay = replays.find(item => item.id === req.params.id);
   if (!replay || !replay.filePath) return res.status(404).json({ error: 'Replay not found.' });
@@ -143,9 +244,9 @@ app.get('/api/obs/preview', async (req, res) => {
     const screenshot = await obsRequest('GetSourceScreenshot', {
       sourceName: scene.currentProgramSceneName,
       imageFormat: 'png',
-      imageWidth: 960,
-      imageHeight: 540,
-      imageCompressionQuality: 80
+      imageWidth: 1920,
+      imageHeight: 1080,
+      imageCompressionQuality: 100
     });
     res.json({ imageData: screenshot.imageData, sceneName: scene.currentProgramSceneName });
   } catch (error) {
@@ -162,9 +263,9 @@ app.get('/api/obs/preview/htmx', async (req, res) => {
     const screenshot = await obsRequest('GetSourceScreenshot', {
       sourceName: scene.currentProgramSceneName,
       imageFormat: 'png',
-      imageWidth: 960,
-      imageHeight: 540,
-      imageCompressionQuality: 80
+      imageWidth: 1920,
+      imageHeight: 1080,
+      imageCompressionQuality: 100
     });
     res.set('X-OBS-Scene', scene.currentProgramSceneName);
     res.send(`<img class="htmx-preview-image" alt="OBS Program preview" src="${screenshot.imageData}">`);
@@ -363,14 +464,15 @@ app.post('/api/broadcast/preview', (req, res) => {
 });
 
 app.post('/api/obs/connect', async (req, res) => {
-  const address = String(req.body.address || state.obs.address).trim();
-  const port = Number(req.body.port || state.obs.port);
-  const password = String(req.body.password || '');
+  const remembered = readObsCredentials();
+  const address = String(req.body.address || remembered.address || state.obs.address).trim();
+  const port = Number(req.body.port || remembered.port || state.obs.port);
+  const password = String(req.body.password || remembered.password || '');
   if (!address || !Number.isInteger(port) || port < 1 || port > 65535) return res.status(400).json({ error: 'Enter a valid OBS address and port.' });
-  state.obs = { address, port, password: password || state.obs.password };
+  state.obs = { address, port };
   try {
     if (obsStatus.connected) await obs.disconnect();
-    await obs.connect(`ws://${address}:${port}`, state.obs.password);
+    await obs.connect(`ws://${address}:${port}`, password);
     obsStatus.connected = true;
     obsStatus.error = '';
     await refreshObsStatus();

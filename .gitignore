@@ -2,6 +2,9 @@ node_modules/
 data/processed-replays/
 data/replays.json
 data/tournament.json
+data/guest-profiles.json
+data/obs-credentials.json
+data/.obs-credentials.key
 .env
 .env.*
 *.log

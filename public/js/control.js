@@ -9,6 +9,9 @@
   let noticeTimer;
   let lastNotice = '';
   let lastNoticeAt = 0;
+  let guestProfiles = [];
+  let selectedGuestProfileId = '';
+  let rememberObsCredentials = false;
   const get = (object, path) => path.split('.').reduce((value, key) => value && value[key], object);
   const set = (object, path, value) => { const keys = path.split('.'); const last = keys.pop(); const target = keys.reduce((item, key) => item[key], object); target[last] = value; };
   function notify(message, type = 'success') {
@@ -155,6 +158,9 @@
   async function connectObs() {
     const button = document.getElementById('obs-connect');
     const feedback = document.getElementById('obs-feedback');
+    const address = document.getElementById('obs-address').value;
+    const port = Number(document.getElementById('obs-port').value);
+    const password = document.getElementById('obs-password').value;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     button.disabled = true;
@@ -162,7 +168,10 @@
     feedback.textContent = 'Connecting to OBS WebSocket…';
     feedback.className = 'obs-feedback';
     try {
-      const response = await fetch('/api/obs/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address: document.getElementById('obs-address').value, port: Number(document.getElementById('obs-port').value), password: document.getElementById('obs-password').value }), signal: controller.signal });
+      if (rememberObsCredentials) {
+        await fetch('/api/obs/credentials', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ remember: true, address, port, password }) });
+      }
+      const response = await fetch('/api/obs/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ address, port, password }), signal: controller.signal });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'OBS connection failed.');
       renderObs(data.obs);
@@ -198,6 +207,87 @@
     }).join('');
   }
   const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
+  const presentationSequence = ['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'special_guest'];
+  function isEditableTarget(target) {
+    return target instanceof HTMLElement && (
+      target.isContentEditable ||
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT'
+    );
+  }
+  async function activatePresentation(mode, winner) {
+    await action(`/api/broadcast/${mode}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner: winner || null })
+    }, `${mode.replace('_', ' ').replace(/\b\w/g, character => character.toUpperCase())} started.`);
+  }
+  function activateRelativePresentation(direction) {
+    const current = state && state.broadcast && state.broadcast.mode || 'gameplay';
+    let currentIndex = presentationSequence.indexOf(current);
+    if (currentIndex < 0) currentIndex = 0;
+    const nextIndex = (currentIndex + direction + presentationSequence.length) % presentationSequence.length;
+    activatePresentation(presentationSequence[nextIndex]);
+  }
+  document.addEventListener('keydown', event => {
+    if (!event.ctrlKey || event.altKey || event.repeat || isEditableTarget(event.target)) return;
+    const key = event.key.toLowerCase();
+    let handled = true;
+    switch (key) {
+      case '[': activateRelativePresentation(-1); break;
+      case ']': activateRelativePresentation(1); break;
+      case '1': activatePresentation('gameplay'); break;
+      case '2': activatePresentation('match_intro'); break;
+      case '3': activatePresentation('game_transition'); break;
+      case '4': activatePresentation('winner', 1); break;
+      case '5': activatePresentation('winner', 2); break;
+      case '6': activatePresentation('standby'); break;
+      case '7': activatePresentation('special_guest'); break;
+      case 'z':
+        if (!undoStack.length) handled = false;
+        else document.getElementById('undo').click();
+        break;
+      default: handled = false;
+    }
+    if (handled) event.preventDefault();
+  });
+  function renderGuestProfiles(profiles) {
+    guestProfiles = Array.isArray(profiles) ? profiles : [];
+    const select = document.getElementById('guest-profile-select');
+    const selected = selectedGuestProfileId;
+    select.replaceChildren(new Option('Select saved guest…', ''));
+    guestProfiles.forEach(profile => select.appendChild(new Option(profile.name, profile.id)));
+    select.value = guestProfiles.some(profile => profile.id === selected) ? selected : '';
+  }
+  async function refreshGuestProfiles() {
+    try {
+      const response = await fetch('/api/guest-profiles');
+      const data = await response.json();
+      if (response.ok) renderGuestProfiles(data.profiles);
+    } catch (error) {
+      notify('Saved guest profiles could not be loaded.', 'error');
+    }
+  }
+  function setRememberObsButton(enabled) {
+    rememberObsCredentials = enabled;
+    const button = document.getElementById('remember-obs');
+    button.classList.toggle('is-on', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
+    button.querySelector('b').textContent = enabled ? 'ON' : 'OFF';
+  }
+  async function loadObsCredentials() {
+    try {
+      const response = await fetch('/api/obs/credentials');
+      const data = await response.json();
+      if (!response.ok) return;
+      document.getElementById('obs-address').value = data.address || '127.0.0.1';
+      document.getElementById('obs-port').value = data.port || 4455;
+      setRememberObsButton(Boolean(data.remember));
+    } catch (error) {
+      console.error('Unable to restore OBS settings:', error);
+    }
+  }
   function initializeCharacterAutocomplete() {
     const characters = Array.isArray(window.tekkenCharacters) ? window.tekkenCharacters : [];
     document.querySelectorAll('[data-path$=".character"]').forEach(input => {
@@ -269,6 +359,78 @@
     };
     reader.readAsDataURL(file);
   });
+  document.getElementById('guest-profile-select').addEventListener('change', event => {
+    selectedGuestProfileId = event.target.value;
+  });
+  document.getElementById('guest-profile-load').addEventListener('click', async () => {
+    const profile = guestProfiles.find(item => item.id === selectedGuestProfileId);
+    if (!profile) { notify('Select a saved guest first.', 'warning'); return; }
+    remember();
+    state.specialGuest = {
+      name: profile.name || '',
+      title: profile.title || '',
+      organization: profile.organization || '',
+      subtitle: profile.subtitle || '',
+      photo: profile.photo || ''
+    };
+    try { await save(); notify(`${profile.name} loaded.`, 'success'); } catch (error) { notify(friendlyError(error.message), 'error'); }
+  });
+  document.getElementById('guest-profile-save').addEventListener('click', async () => {
+    const guest = state.specialGuest || {};
+    if (!String(guest.name || '').trim()) { notify('Enter a guest name before saving.', 'warning'); return; }
+    const profile = { id: selectedGuestProfileId || '', name: guest.name, title: guest.title, organization: guest.organization, subtitle: guest.subtitle, photo: guest.photo };
+    try {
+      const response = await fetch('/api/guest-profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      renderGuestProfiles(data.profiles);
+      const saved = data.profiles.find(item => item.name === profile.name && (!profile.id || item.id === profile.id));
+      if (saved) selectedGuestProfileId = saved.id;
+      document.getElementById('guest-profile-select').value = selectedGuestProfileId;
+      notify('Guest profile saved.', 'success');
+    } catch (error) { notify(friendlyError(error.message), 'error'); }
+  });
+  document.getElementById('guest-profile-new').addEventListener('click', () => {
+    selectedGuestProfileId = '';
+    document.getElementById('guest-profile-select').value = '';
+    state.specialGuest = { name: '', title: '', organization: '', subtitle: '', photo: '' };
+    document.getElementById('guest-photo-file').value = '';
+    render();
+  });
+  document.getElementById('guest-profile-delete').addEventListener('click', async () => {
+    if (!selectedGuestProfileId) { notify('Select a saved guest first.', 'warning'); return; }
+    const profile = guestProfiles.find(item => item.id === selectedGuestProfileId);
+    if (!profile || !window.confirm(`Delete the saved profile for ${profile.name}?`)) return;
+    try {
+      const response = await fetch(`/api/guest-profiles/${encodeURIComponent(selectedGuestProfileId)}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      selectedGuestProfileId = '';
+      renderGuestProfiles(data.profiles);
+      notify('Guest profile deleted.', 'success');
+    } catch (error) { notify(friendlyError(error.message), 'error'); }
+  });
+  document.getElementById('toggle-obs-password').addEventListener('click', event => {
+    const input = document.getElementById('obs-password');
+    const hidden = input.type === 'password';
+    input.type = hidden ? 'text' : 'password';
+    event.currentTarget.textContent = hidden ? 'Hide' : 'Show';
+    event.currentTarget.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+    event.currentTarget.setAttribute('aria-pressed', String(hidden));
+  });
+  document.getElementById('remember-obs').addEventListener('click', async event => {
+    rememberObsCredentials = !rememberObsCredentials;
+    setRememberObsButton(rememberObsCredentials);
+    const address = document.getElementById('obs-address').value;
+    const port = Number(document.getElementById('obs-port').value);
+    const password = document.getElementById('obs-password').value;
+    try {
+      const response = await fetch('/api/obs/credentials', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ remember: rememberObsCredentials, address, port, password }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      notify(rememberObsCredentials ? 'OBS credentials will be restored securely.' : 'Remembered OBS credentials removed.', 'success');
+    } catch (error) { notify(friendlyError(error.message), 'error'); }
+  });
   document.getElementById('preview-transition').addEventListener('click', async () => {
     await action('/api/broadcast/preview', {
       method: 'POST',
@@ -335,6 +497,6 @@
     };
   }
   connectControlSocket();
-  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; }).catch(error => notify(friendlyError(error.message), 'error'));
+  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); }).catch(error => notify(friendlyError(error.message), 'error'));
   setInterval(updateTimerDisplay, 250);
 }());

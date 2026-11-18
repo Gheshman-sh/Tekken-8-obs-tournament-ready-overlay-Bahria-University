@@ -887,3 +887,120 @@ h2 {
         grid-template-columns: 1fr
     }
 }
+
+kbd {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 2px 5px;
+    border: 1px solid #4a505a;
+    border-bottom-color: #626975;
+    border-radius: 3px;
+    background: #17191d;
+    color: #adb5c1;
+    font: 700 9px/1.2 Consolas, monospace;
+    vertical-align: middle
+}
+
+.top-actions kbd,
+.broadcast-actions kbd {
+    margin-left: 7px
+}
+
+.guest-settings,
+.obs-settings,
+.keyboard-guide {
+    margin-top: 11px;
+    border: 1px solid #343941;
+    border-radius: 4px;
+    background: #1b1d21
+}
+
+.guest-settings summary,
+.obs-settings summary,
+.keyboard-guide summary {
+    padding: 9px 10px;
+    color: #d7dae0;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    list-style-position: inside
+}
+
+.guest-settings[open] summary,
+.obs-settings[open] summary,
+.keyboard-guide[open] summary {
+    border-bottom: 1px solid #343941
+}
+
+.guest-profile-manager,
+.guest-fields,
+.obs-settings .two-col,
+.obs-settings .password-field,
+.obs-settings > .toggle,
+.obs-settings > .button-row {
+    margin-left: 10px;
+    margin-right: 10px
+}
+
+.guest-profile-manager {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+    padding-top: 4px
+}
+
+.guest-profile-manager label {
+    margin-bottom: 0
+}
+
+.guest-profile-manager .button-row {
+    padding-bottom: 10px
+}
+
+.password-field {
+    position: relative;
+    display: block
+}
+
+.password-field input {
+    padding-right: 56px
+}
+
+.password-toggle {
+    position: absolute;
+    right: 5px;
+    bottom: 5px;
+    height: 28px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 3px;
+    background: #343943;
+    color: #cbd1da;
+    font-size: 10px;
+    cursor: pointer
+}
+
+.obs-settings .toggle {
+    margin-top: 8px;
+    margin-bottom: 8px
+}
+
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    padding: 9px 10px
+}
+
+.shortcut-grid span {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #aab0bb;
+    font-size: 11px
+}
+
+.keyboard-guide {
+    padding: 0
+}
