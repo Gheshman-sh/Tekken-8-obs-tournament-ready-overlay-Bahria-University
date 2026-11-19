@@ -65,6 +65,12 @@
     });
     document.querySelector('[data-score="player1"]').textContent = state.player1.score;
     document.querySelector('[data-score="player2"]').textContent = state.player2.score;
+    document.querySelectorAll('[data-triangle-action]').forEach(button => {
+      const [player, index] = button.dataset.triangleAction.split(':');
+      const enabled = Number(index) < Number(state[player].triangles || 0);
+      button.classList.toggle('is-on', enabled);
+      button.setAttribute('aria-pressed', String(enabled));
+    });
     const mode = state.broadcast && state.broadcast.mode || 'gameplay';
     const stateLabel = mode.replace('_', ' ').toUpperCase();
     document.getElementById('broadcast-state').textContent = stateLabel;
@@ -526,9 +532,11 @@
   paths.forEach(element => element.addEventListener('change', async () => { const value = element.type === 'checkbox' ? element.checked : element.type === 'number' ? Number(element.value) : element.value; remember(); set(state, element.dataset.path, value); try { await save(); notify('Settings saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.querySelectorAll('.toggle').forEach(button => button.addEventListener('click', async () => { remember(); set(state, button.dataset.path, !get(state, button.dataset.path)); try { await save(); notify('Setting saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.querySelectorAll('[data-score-action]').forEach(button => button.addEventListener('click', async () => { const [player, delta] = button.dataset.scoreAction.split(':'); remember(); state[player].score = Math.max(0, state[player].score + Number(delta)); try { await save(); notify('Score updated.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
+  document.querySelectorAll('[data-triangle-action]').forEach(button => button.addEventListener('click', async () => { const [player, index] = button.dataset.triangleAction.split(':'); remember(); state[player].triangles = Number(index) < state[player].triangles ? Number(index) : Number(index) + 1; try { await save(); notify('Triangle markers updated.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.getElementById('swap').onclick = async () => { remember();[state.player1, state.player2] = [state.player2, state.player1]; try { await save(); notify('Player sides swapped.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('next-game').onclick = async () => { remember(); state.gameNumber = Number(state.gameNumber || 1) + 1; try { await save(); notify('Next game started.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('reset-scores').onclick = async () => { remember(); state.player1.score = 0; state.player2.score = 0; try { await save(); notify('Scores reset.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
+  document.getElementById('reset-triangles').onclick = async () => { remember(); state.player1.triangles = 0; state.player2.triangles = 0; try { await save(); notify('Triangle markers reset.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('clear-match').onclick = async () => { if (!window.confirm('Clear the current match data?')) return; remember(); state.player1 = { name: '', character: '', score: 0 }; state.player2 = { name: '', character: '', score: 0 }; try { await save(); notify('Match cleared.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));

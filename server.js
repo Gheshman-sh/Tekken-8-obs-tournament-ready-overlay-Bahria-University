@@ -27,8 +27,8 @@ const defaultState = {
   gameNumber: 1,
   matchFormat: 'BEST OF 5',
   notes: '',
-  player1: { name: 'Player 1', character: '', score: 0 },
-  player2: { name: 'Player 2', character: '', score: 0 },
+  player1: { name: 'Player 1', character: '', score: 0, triangles: 0 },
+  player2: { name: 'Player 2', character: '', score: 0, triangles: 0 },
   broadcast: { mode: 'gameplay', winner: null, timer: null, previousMode: null },
   specialGuest: { name: '', title: '', organization: '', subtitle: '', photo: '' },
   transitionSettings: {
@@ -85,10 +85,20 @@ function writeJson(file, value) {
 function mergeState(saved) {
   const sanitizedObs = { ...(saved.obs || {}) };
   delete sanitizedObs.password;
+  const savedPlayer1 = saved.player1 || {};
+  const savedPlayer2 = saved.player2 || {};
   return {
     ...defaultState, ...saved,
-    player1: { ...defaultState.player1, ...(saved.player1 || {}) },
-    player2: { ...defaultState.player2, ...(saved.player2 || {}) },
+    player1: {
+      ...defaultState.player1,
+      ...savedPlayer1,
+      triangles: savedPlayer1.triangles == null ? Math.min(3, Math.max(0, Number(savedPlayer1.score) || 0)) : savedPlayer1.triangles
+    },
+    player2: {
+      ...defaultState.player2,
+      ...savedPlayer2,
+      triangles: savedPlayer2.triangles == null ? Math.min(3, Math.max(0, Number(savedPlayer2.score) || 0)) : savedPlayer2.triangles
+    },
     settings: { ...defaultState.settings, ...(saved.settings || {}) },
     broadcast: { ...defaultState.broadcast, ...(saved.broadcast || {}) },
     specialGuest: { ...defaultState.specialGuest, ...(saved.specialGuest || {}) },
@@ -416,6 +426,8 @@ app.put('/api/state', (req, res) => {
   });
   state.player1.score = safeNumber(state.player1.score);
   state.player2.score = safeNumber(state.player2.score);
+  state.player1.triangles = Math.max(0, Math.min(3, Math.round(Number(state.player1.triangles) || 0)));
+  state.player2.triangles = Math.max(0, Math.min(3, Math.round(Number(state.player2.triangles) || 0)));
   persistAndBroadcast();
   res.json({ state: publicState() });
 });

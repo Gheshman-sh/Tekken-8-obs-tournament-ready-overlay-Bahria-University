@@ -335,6 +335,58 @@ h2 {
     color: #ff8c96
 }
 
+.triangle-controls {
+    margin: 14px 0;
+    padding: 12px;
+    border: 1px solid #30343b;
+    border-radius: 4px;
+    background: #17191d
+}
+
+.triangle-controls-heading,
+.triangle-player {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px
+}
+
+.triangle-controls-heading {
+    margin-bottom: 10px;
+    color: #8f96a3;
+    font-size: 10px
+}
+
+.triangle-player + .triangle-player {
+    margin-top: 8px
+}
+
+.triangle-buttons {
+    display: flex;
+    gap: 6px
+}
+
+.triangle-button {
+    width: 25px;
+    height: 23px;
+    border: 0;
+    background: #3a3f48;
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    cursor: pointer
+}
+
+.triangle-buttons[data-triangle-player="player1"] .triangle-button.is-on {
+    background: #e33b4c
+}
+
+.triangle-buttons[data-triangle-player="player2"] .triangle-button.is-on {
+    background: #4c88e8
+}
+
+.triangle-controls > .button {
+    margin-top: 10px
+}
+
 .checks {
     display: grid;
     grid-template-columns: 1fr 1fr;

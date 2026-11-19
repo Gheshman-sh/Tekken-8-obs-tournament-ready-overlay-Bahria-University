@@ -186,19 +186,14 @@
     reportReplayStatus('loading');
   }
 
-  function renderScoreIndicators(playerKey, score, matchFormat) {
+  function renderScoreIndicators(playerKey, triangles) {
     const row = document.querySelector(`[data-score-row="${playerKey}"]`);
     if (!row) return;
-    const formatNumber = String(matchFormat || '').match(/(\d+)/);
-    const formatBestOf = formatNumber ? Number(formatNumber[1]) : 5;
-    const target = Number.isFinite(formatBestOf) && formatBestOf > 1
-      ? Math.max(1, Math.ceil(formatBestOf / 2))
-      : 3;
     const previous = previousScores[playerKey];
-    const safeScore = Math.max(0, Math.min(target, Number(score) || 0));
+    const safeScore = Math.max(0, Math.min(3, Number(triangles) || 0));
 
     row.replaceChildren();
-    for (let index = 0; index < target; index++) {
+    for (let index = 0; index < 3; index++) {
       const marker = document.createElement('span');
       marker.className = `win-marker${index < safeScore ? ' won' : ''}`;
       if (index < safeScore && (previous === null || index >= previous)) {
@@ -268,8 +263,8 @@
     set('p2Character', settings.showCharacters ? state.player2.character : ''); set('p2Score', state.player2.score);
     fitName('p1Name', state.player1.name); fitName('p2Name', state.player2.name);
     bumpScore('p1', state.player1.score); bumpScore('p2', state.player2.score);
-    renderScoreIndicators('p1', state.player1.score, state.matchFormat);
-    renderScoreIndicators('p2', state.player2.score, state.matchFormat);
+    renderScoreIndicators('p1', state.player1.triangles);
+    renderScoreIndicators('p2', state.player2.triangles);
     set('winnerName', winner.name); set('winnerCharacter', winner.character);
     const guest = state.specialGuest || {};
     set('guestName', guest.name || 'Special Guest');
