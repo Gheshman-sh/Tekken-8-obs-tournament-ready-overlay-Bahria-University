@@ -17,10 +17,14 @@ const GUEST_PROFILES_FILE = path.join(DATA_DIR, 'guest-profiles.json');
 const OBS_CREDENTIALS_FILE = path.join(DATA_DIR, 'obs-credentials.json');
 const YOUTUBE_PREVIEW_FILE = path.join(DATA_DIR, 'youtube-preview.json');
 const PROCESSED_REPLAY_DIR = path.join(DATA_DIR, 'processed-replays');
+const OPERATOR_TOKEN_FILE = path.join(DATA_DIR, 'operator-token');
+const GUEST_MEDIA_DIR = path.join(DATA_DIR, 'guest-media');
+let operatorToken;
 const execFileAsync = promisify(execFile);
 const PORT = Number(process.env.PORT) || 3000;
 
 const defaultState = {
+  revision: 0,
   tournamentName: 'BAHRIA UNIVERSITY ESPORTS SHOWDOWN',
   roundName: 'Winners Final',
   roundTime: '60',
@@ -66,6 +70,7 @@ const defaultState = {
 function ensureData() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(PROCESSED_REPLAY_DIR, { recursive: true });
+  fs.mkdirSync(GUEST_MEDIA_DIR, { recursive: true });
   if (!fs.existsSync(STATE_FILE)) fs.writeFileSync(STATE_FILE, JSON.stringify(defaultState, null, 2));
   if (!fs.existsSync(REPLAYS_FILE)) fs.writeFileSync(REPLAYS_FILE, '[]');
   if (!fs.existsSync(GUEST_PROFILES_FILE)) fs.writeFileSync(GUEST_PROFILES_FILE, '[]');
@@ -74,20 +79,80 @@ function ensureData() {
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
     console.error(`Unable to read ${file}:`, error.message);
+    try {
+      if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.corrupt-${Date.now()}`);
+      const backup = `${file}.bak`;
+      if (fs.existsSync(backup)) {
+        const recovered = JSON.parse(fs.readFileSync(backup, 'utf8'));
+        console.error(`Recovered ${file} from ${backup}.`);
+        return recovered;
+      }
+    } catch (recoveryError) {
+      console.error(`Unable to recover ${file}:`, recoveryError.message);
+    }
     return fallback;
   }
 }
 function writeJson(file, value) {
   const temporary = `${file}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(value, null, 2));
-  fs.renameSync(temporary, file);
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(value, null, 2));
+    if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.bak`);
+    fs.renameSync(temporary, file);
+  } catch (error) {
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (cleanupError) { console.error('Temporary state cleanup failed:', cleanupError.message); }
+    throw error;
+  }
+}
+function safeText(value, fallback = '', maxLength = 120) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : fallback;
+}
+function storeGuestPhoto(value) {
+  if (typeof value !== 'string' || !value) return '';
+  if (/^\/api\/guest-photo\/[a-f0-9]{64}\.(png|jpe?g|webp)$/i.test(value)) return value;
+  const match = value.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z0-9+/=\r\n]+)$/i);
+  if (!match) return '';
+  const extension = match[1] === 'image/jpeg' ? 'jpg' : match[1].split('/')[1];
+  const content = Buffer.from(match[2], 'base64');
+  if (!content.length || content.length > 6 * 1024 * 1024) return '';
+  const filename = `${crypto.createHash('sha256').update(content).digest('hex')}.${extension}`;
+  const file = path.join(GUEST_MEDIA_DIR, filename);
+  if (!fs.existsSync(file)) fs.writeFileSync(file, content, { flag: 'wx' });
+  return `/api/guest-photo/${filename}`;
+}
+function normalizeStateValues(value) {
+  value.tournamentName = safeText(value.tournamentName, defaultState.tournamentName, 120) || defaultState.tournamentName;
+  value.roundName = safeText(value.roundName, defaultState.roundName, 80);
+  value.roundTime = String(Math.max(1, Math.min(999, Math.round(Number(value.roundTime) || 60))));
+  value.gameNumber = Math.max(1, Math.min(999, Math.round(Number(value.gameNumber) || 1)));
+  value.matchFormat = safeText(value.matchFormat, defaultState.matchFormat, 40) || defaultState.matchFormat;
+  value.notes = safeText(value.notes, '', 500);
+  for (const player of [value.player1, value.player2]) {
+    player.name = safeText(player.name, '', 80);
+    player.character = safeText(player.character, '', 50);
+    player.score = safeNumber(player.score);
+    player.triangles = Math.max(0, Math.min(3, Math.round(Number(player.triangles) || 0)));
+  }
+  for (const key of ['match_intro', 'game_transition', 'winner']) {
+    const timer = value.broadcastTimers[key];
+    timer.enabled = Boolean(timer.enabled);
+    timer.duration = Math.max(1, Math.min(120, Math.round(Number(timer.duration) || defaultState.broadcastTimers[key].duration)));
+    timer.nextMode = ['gameplay', 'standby'].includes(timer.nextMode) ? timer.nextMode : defaultState.broadcastTimers[key].nextMode;
+  }
+  const guest = value.specialGuest;
+  guest.name = safeText(guest.name, '', 100);
+  guest.title = safeText(guest.title, '', 100);
+  guest.organization = safeText(guest.organization, '', 120);
+  guest.subtitle = safeText(guest.subtitle, '', 160);
+  guest.photo = storeGuestPhoto(guest.photo);
+  return value;
 }
 function mergeState(saved) {
   const sanitizedObs = { ...(saved.obs || {}) };
   delete sanitizedObs.password;
   const savedPlayer1 = saved.player1 || {};
   const savedPlayer2 = saved.player2 || {};
-  return {
+  return normalizeStateValues({
     ...defaultState, ...saved,
     player1: {
       ...defaultState.player1,
@@ -112,20 +177,89 @@ function mergeState(saved) {
       winner: { ...defaultState.broadcastTimers.winner, ...((saved.broadcastTimers || {}).winner || {}) }
     },
     obs: { ...defaultState.obs, ...sanitizedObs }
-  };
+  });
 }
 ensureData();
-let state = mergeState(readJson(STATE_FILE, defaultState));
+const savedState = readJson(STATE_FILE, defaultState);
+let state = mergeState(savedState);
+delete state.connectedClients;
+delete state.activeReplay;
+delete state.replayActive;
+delete state.replayOperation;
+state.revision = Number.isInteger(state.revision) && state.revision >= 0 ? state.revision : 0;
+if (savedState.specialGuest && savedState.specialGuest.photo !== state.specialGuest.photo) writeJson(STATE_FILE, state);
+operatorToken = loadOperatorToken();
 let replays = readJson(REPLAYS_FILE, []);
 let guestProfiles = readJson(GUEST_PROFILES_FILE, []);
+let guestProfilesChanged = false;
+guestProfiles = Array.isArray(guestProfiles) ? guestProfiles.map(profile => {
+  const photo = storeGuestPhoto(profile.photo);
+  if (photo !== profile.photo) guestProfilesChanged = true;
+  return { ...profile, photo };
+}) : [];
+if (guestProfilesChanged) writeJson(GUEST_PROFILES_FILE, guestProfiles);
 let replayActive = false;
 let activeReplayId = null;
+let activeReplayToken = null;
 let replaySequence = 0;
 let replayOperation = { status: 'idle', preset: null, message: '', busy: false };
 let replaySaveWaiter;
 let broadcastTimer;
+let reconnectTimer;
+let obsConnectInFlight = null;
+let lastObsConnection;
 const broadcastModes = new Set(['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'special_guest', 'replay_intro', 'replay']);
 const timerActions = new Set(['skip', 'extend', 'cancel', 'gameplay', 'previous']);
+const operatorSessions = new Set();
+
+function loadOperatorToken() {
+  const configured = String(process.env.OPERATOR_TOKEN || '').trim();
+  if (configured) return configured;
+  try {
+    if (!fs.existsSync(OPERATOR_TOKEN_FILE)) {
+      fs.writeFileSync(OPERATOR_TOKEN_FILE, crypto.randomBytes(24).toString('hex'), { mode: 0o600 });
+    }
+    return fs.readFileSync(OPERATOR_TOKEN_FILE, 'utf8').trim();
+  } catch (error) {
+    throw new Error(`Unable to initialize operator authentication: ${error.message}`);
+  }
+}
+
+function getCookie(request, name) {
+  const cookies = String(request.headers.cookie || '').split(';');
+  const entry = cookies.find(cookie => cookie.trim().startsWith(`${name}=`));
+  return entry ? decodeURIComponent(entry.trim().slice(name.length + 1)) : '';
+}
+
+function setSessionCookie(response, value) {
+  response.setHeader('Set-Cookie', `operator_session=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/`);
+}
+
+function clearSessionCookie(response) {
+  response.setHeader('Set-Cookie', 'operator_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+}
+
+function requireOperator(request, response, next) {
+  const session = getCookie(request, 'operator_session');
+  if (!session || !operatorSessions.has(session)) return response.status(401).json({ error: 'Operator authentication is required.' });
+  next();
+}
+
+function clearObsStatus(error = 'OBS connection is unavailable.') {
+  obsStatus.connected = false;
+  obsStatus.replayBufferActive = false;
+  obsStatus.recording = false;
+  obsStatus.streaming = false;
+  obsStatus.error = error;
+}
+
+function scheduleObsReconnect() {
+  if (reconnectTimer || !lastObsConnection || obsConnectInFlight) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectToObs(lastObsConnection.address, lastObsConnection.port, lastObsConnection.password, true).catch(() => {});
+  }, 5000);
+}
 function publicReplays() {
   return replays.map(replay => ({ ...replay, available: Boolean(replay.filePath && fs.existsSync(path.resolve(replay.filePath))) }));
 }
@@ -185,6 +319,29 @@ const obsStatus = { connected: false, replayBufferActive: false, recording: fals
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(ROOT, 'public')));
+app.post('/api/auth/login', (req, res) => {
+  const supplied = String(req.body && req.body.token || '');
+  const expected = Buffer.from(operatorToken);
+  const actual = Buffer.from(supplied);
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
+    return res.status(401).json({ error: 'Invalid operator token.' });
+  }
+  const session = crypto.randomBytes(32).toString('hex');
+  operatorSessions.add(session);
+  setSessionCookie(res, session);
+  res.json({ authenticated: true });
+});
+app.get('/api/auth/status', (req, res) => res.json({ authenticated: operatorSessions.has(getCookie(req, 'operator_session')) }));
+app.post('/api/auth/logout', requireOperator, (req, res) => {
+  operatorSessions.delete(getCookie(req, 'operator_session'));
+  clearSessionCookie(res);
+  res.sendStatus(204);
+});
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.path === '/auth/login' || req.path === '/auth/status' ||
+      req.path === '/replay/browser-status' || req.path === '/replay/browser-ended') return next();
+  return requireOperator(req, res, next);
+});
 app.get('/vendor/htmx.min.js', (req, res) => res.sendFile(path.join(ROOT, 'node_modules', 'htmx.org', 'dist', 'htmx.min.js')));
 app.get('/', (req, res) => res.redirect('/control'));
 app.get('/control', (req, res) => res.sendFile(path.join(ROOT, 'public', 'control.html')));
@@ -203,7 +360,7 @@ app.post('/api/guest-profiles', (req, res) => {
     title: String(profile.title || '').trim(),
     organization: String(profile.organization || '').trim(),
     subtitle: String(profile.subtitle || '').trim(),
-    photo: typeof profile.photo === 'string' ? profile.photo : ''
+    photo: storeGuestPhoto(profile.photo)
   };
   const index = guestProfiles.findIndex(item => item.id === id);
   if (index >= 0) guestProfiles[index] = saved;
@@ -250,6 +407,11 @@ app.get('/api/replays/:id/video', (req, res) => {
     if (error && !res.headersSent) res.status(error.statusCode || 500).json({ error: 'Replay file could not be served.' });
   });
 });
+app.get('/api/guest-photo/:filename([a-f0-9]{64}\\.(png|jpg|jpeg|webp))', (req, res) => {
+  const filePath = path.join(GUEST_MEDIA_DIR, req.params.filename);
+  if (!fs.existsSync(filePath)) return res.sendStatus(404);
+  res.sendFile(filePath, { dotfiles: 'deny' });
+});
 function extractYouTubeVideoId(value) {
   const input = String(value || '').trim();
   if (!input) return '';
@@ -293,7 +455,11 @@ app.delete('/api/youtube-preview', (req, res) => {
 function publicState() {
   const broadcast = { ...state.broadcast };
   if (broadcast.timer) broadcast.timer = { ...broadcast.timer, remainingMs: Math.max(0, broadcast.timer.endsAt - Date.now()) };
-  const activeReplay = activeReplayId ? { id: activeReplayId, url: `/api/replays/${encodeURIComponent(activeReplayId)}/video` } : null;
+  const activeReplay = activeReplayId ? {
+    id: activeReplayId,
+    token: activeReplayToken,
+    url: `/api/replays/${encodeURIComponent(activeReplayId)}/video`
+  } : null;
   return { ...state, broadcast, connectedClients: clients.size, obs: { address: state.obs.address, port: state.obs.port }, replayActive, activeReplay, replayOperation };
 }
 function broadcast(message) {
@@ -301,6 +467,7 @@ function broadcast(message) {
   for (const client of clients) if (client.readyState === 1) client.send(payload);
 }
 function persistAndBroadcast() {
+  state.revision = (Number.isInteger(state.revision) ? state.revision : 0) + 1;
   writeJson(STATE_FILE, state);
   broadcast({ type: 'state', state: publicState(), obs: obsStatus, replays: publicReplays() });
 }
@@ -414,6 +581,10 @@ async function processSlowMotion(sourcePath, seconds) {
 
 app.put('/api/state', (req, res) => {
   const incoming = req.body || {};
+  const incomingRevision = Number(incoming.revision);
+  if (!Number.isInteger(incomingRevision) || incomingRevision !== state.revision) {
+    return res.status(409).json({ error: 'State changed in another control panel. Review the latest values before saving.', code: 'STATE_CONFLICT', state: publicState() });
+  }
   state = mergeState({
     ...state,
     ...incoming,
@@ -424,6 +595,10 @@ app.put('/api/state', (req, res) => {
     broadcastTimers: incoming.broadcastTimers || state.broadcastTimers,
     obs: state.obs
   });
+  delete state.connectedClients;
+  delete state.activeReplay;
+  delete state.replayActive;
+  delete state.replayOperation;
   state.player1.score = safeNumber(state.player1.score);
   state.player2.score = safeNumber(state.player2.score);
   state.player1.triangles = Math.max(0, Math.min(3, Math.round(Number(state.player1.triangles) || 0)));
@@ -438,12 +613,36 @@ app.post('/api/broadcast/:mode(gameplay|match_intro|game_transition|winner|stand
   const duration = req.body && req.body.duration != null ? Number(req.body.duration) : configured && configured.duration;
   const enabled = req.body && req.body.enabled != null ? Boolean(req.body.enabled) : configured && configured.enabled;
   const nextMode = req.body && req.body.nextMode || configured && configured.nextMode || 'gameplay';
+  if (mode === 'winner' && ![1, 2].includes(winner)) return res.status(400).json({ error: 'Winner must be Player 1 or Player 2.' });
   try {
     setBroadcastMode(mode, winner, duration, nextMode, enabled);
     res.json({ state: publicState() });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+});
+app.post('/api/match/next-game', async (req, res) => {
+  if (replayOperation.busy && state.broadcast.mode !== 'replay_intro' && state.broadcast.mode !== 'replay') {
+    return res.status(409).json({ error: 'Stop the active replay operation before starting the next game.' });
+  }
+  if (replayActive || state.broadcast.mode === 'replay_intro' || state.broadcast.mode === 'replay') await stopReplay();
+  state.gameNumber = Math.max(1, Math.min(999, Math.round(Number(state.gameNumber) || 1) + 1));
+  clearTimeout(broadcastTimer);
+  state.broadcast = { mode: 'gameplay', winner: null, timer: null, previousMode: null };
+  persistAndBroadcast();
+  res.json({ state: publicState() });
+});
+app.post('/api/match/clear', async (req, res) => {
+  if (replayOperation.busy && state.broadcast.mode !== 'replay_intro' && state.broadcast.mode !== 'replay') {
+    return res.status(409).json({ error: 'Stop the active replay operation before clearing the match.' });
+  }
+  if (replayActive || state.broadcast.mode === 'replay_intro' || state.broadcast.mode === 'replay') await stopReplay();
+  state.player1 = { ...state.player1, name: '', character: '', score: 0, triangles: 0 };
+  state.player2 = { ...state.player2, name: '', character: '', score: 0, triangles: 0 };
+  clearTimeout(broadcastTimer);
+  state.broadcast = { mode: 'gameplay', winner: null, timer: null, previousMode: null };
+  persistAndBroadcast();
+  res.json({ state: publicState() });
 });
 app.post('/api/broadcast/action', (req, res) => {
   const action = req.body && req.body.action;
@@ -488,24 +687,25 @@ app.post('/api/obs/connect', async (req, res) => {
   if (!address || !Number.isInteger(port) || port < 1 || port > 65535) return res.status(400).json({ error: 'Enter a valid OBS address and port.' });
   state.obs = { address, port };
   try {
-    if (obsStatus.connected) await obs.disconnect();
-    await obs.connect(`ws://${address}:${port}`, password);
-    obsStatus.connected = true;
-    obsStatus.error = '';
-    await refreshObsStatus();
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    await connectToObs(address, port, password);
     writeJson(STATE_FILE, state);
-    broadcast({ type: 'obs', obs: obsStatus });
     res.json({ obs: obsStatus });
   } catch (error) {
-    obsStatus.connected = false;
-    obsStatus.error = error.message;
-    broadcast({ type: 'obs', obs: obsStatus });
     res.status(502).json({ error: `OBS connection failed: ${error.message}` });
   }
 });
 app.post('/api/obs/disconnect', async (req, res) => {
+  lastObsConnection = null;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   try { if (obsStatus.connected) await obs.disconnect(); } catch (error) { console.error('OBS disconnect failed:', error.message); }
-  obsStatus.connected = false;
+  clearObsStatus('OBS disconnected by operator.');
   broadcast({ type: 'obs', obs: obsStatus });
   res.json({ obs: obsStatus });
 });
@@ -538,6 +738,30 @@ async function refreshObsStatus() {
     errors.push(`Recording status: ${error.message}`);
   }
   obsStatus.error = errors.join(' ');
+}
+async function connectToObs(address, port, password, reconnecting = false) {
+  if (obsConnectInFlight) return obsConnectInFlight;
+  obsConnectInFlight = (async () => {
+    try {
+      if (obsStatus.connected) await obs.disconnect();
+      await obs.connect(`ws://${address}:${port}`, password);
+      obsStatus.connected = true;
+      obsStatus.error = '';
+      lastObsConnection = { address, port, password };
+      await refreshObsStatus();
+      broadcast({ type: 'obs', obs: obsStatus });
+      if (reconnecting) console.log('OBS reconnected.');
+      return true;
+    } catch (error) {
+      clearObsStatus(error.message);
+      broadcast({ type: 'obs', obs: obsStatus });
+      if (reconnecting) scheduleObsReconnect();
+      throw error;
+    } finally {
+      obsConnectInFlight = null;
+    }
+  })();
+  return obsConnectInFlight;
 }
 async function runObsAction(action) {
   try {
@@ -576,7 +800,7 @@ app.post('/api/replay/preset', async (req, res) => {
     res.status(502).json({ error: error.message, replayOperation });
   }
 });
-app.post('/api/replay/:action', async (req, res) => {
+app.post('/api/replay/:action(start|stop|save|play|stop-playback)', async (req, res) => {
   const action = req.params.action;
   let result;
   if (action === 'start') result = await runObsAction(() => obsRequest('StartReplayBuffer'));
@@ -606,6 +830,7 @@ async function playReplay(id) {
   const sequence = ++replaySequence;
   replayActive = false;
   activeReplayId = null;
+  activeReplayToken = null;
   broadcast({ type: 'replay', active: false });
   setBroadcastMode('replay_intro');
   setReplayOperation('replay_intro', 'Replay intro presentation active.', replayOperation.preset, true);
@@ -613,29 +838,35 @@ async function playReplay(id) {
   if (sequence !== replaySequence) return;
   replayActive = true;
   activeReplayId = replay.id;
+  activeReplayToken = crypto.randomBytes(24).toString('hex');
   setBroadcastMode('replay');
   setReplayOperation('loading', 'Loading replay in the OBS Browser Source.', replayOperation.preset);
-  broadcast({ type: 'replay', active: true, replay: { id: replay.id, url: `/api/replays/${encodeURIComponent(replay.id)}/video` } });
+  broadcast({ type: 'replay', active: true, replay: { id: replay.id, token: activeReplayToken, url: `/api/replays/${encodeURIComponent(replay.id)}/video` } });
 }
 async function stopReplay() {
   replaySequence += 1;
   replayActive = false;
   activeReplayId = null;
+  activeReplayToken = null;
   setBroadcastMode('gameplay');
   setReplayOperation('finished', 'Replay playback stopped.', null, false);
   broadcast({ type: 'replay', active: false });
 }
 app.post('/api/replay/browser-status', (req, res) => {
   const status = String(req.body && req.body.status || '');
+  const replayId = String(req.body && req.body.replayId || '');
+  const token = String(req.body && req.body.token || '');
   const messages = {
     loading: 'Loading replay in the OBS Browser Source.',
     playing: 'Replay playback active.',
     error: String(req.body && req.body.message || 'Replay playback failed.')
   };
   if (!['loading', 'playing', 'error'].includes(status)) return res.status(400).json({ error: 'Invalid replay browser status.' });
+  if (!replayActive || replayId !== activeReplayId || token !== activeReplayToken) return res.status(409).json({ error: 'Stale replay browser status ignored.' });
   if (status === 'error') {
     replayActive = false;
     activeReplayId = null;
+    activeReplayToken = null;
     setBroadcastMode('gameplay');
     setReplayOperation('error', messages.error, replayOperation.preset, false);
     broadcast({ type: 'replay', active: false });
@@ -645,8 +876,12 @@ app.post('/api/replay/browser-status', (req, res) => {
   res.json({ replayOperation });
 });
 app.post('/api/replay/browser-ended', (req, res) => {
+  const replayId = String(req.body && req.body.replayId || '');
+  const token = String(req.body && req.body.token || '');
+  if (!replayActive || replayId !== activeReplayId || token !== activeReplayToken) return res.status(409).json({ error: 'Stale replay completion ignored.' });
   replayActive = false;
   activeReplayId = null;
+  activeReplayToken = null;
   setBroadcastMode('gameplay');
   setReplayOperation('finished', 'Replay playback finished.', null, false);
   broadcast({ type: 'replay', active: false });
@@ -661,6 +896,7 @@ app.patch('/api/replays/:id', (req, res) => {
   res.json(replay);
 });
 app.delete('/api/replays/:id', (req, res) => {
+  if (req.params.id === activeReplayId) return res.status(409).json({ error: 'The active replay cannot be deleted during playback.' });
   const index = replays.findIndex(item => item.id === req.params.id);
   if (index < 0) return res.status(404).json({ error: 'Replay not found.' });
   replays.splice(index, 1);
@@ -669,12 +905,18 @@ app.delete('/api/replays/:id', (req, res) => {
   res.sendStatus(204);
 });
 
-obs.on('ConnectionClosed', () => { obsStatus.connected = false; broadcast({ type: 'obs', obs: obsStatus }); });
+obs.on('ConnectionClosed', () => {
+  clearObsStatus('OBS connection closed.');
+  broadcast({ type: 'obs', obs: obsStatus });
+  scheduleObsReconnect();
+});
 obs.on('ReplayBufferSaved', event => {
   if (!event.savedReplayPath) return;
   if (replaySaveWaiter) replaySaveWaiter.resolve(event.savedReplayPath);
 });
 wss.on('connection', socket => {
+  socket.isAlive = true;
+  socket.on('pong', () => { socket.isAlive = true; });
   clients.add(socket);
   socket.send(JSON.stringify({ type: 'snapshot', state: publicState(), obs: obsStatus, replays: publicReplays() }));
   broadcast({ type: 'state', state: publicState(), obs: obsStatus, replays: publicReplays() });
@@ -682,4 +924,20 @@ wss.on('connection', socket => {
   socket.on('close', () => broadcast({ type: 'state', state: publicState(), obs: obsStatus, replays: publicReplays() }));
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`Tekken Tournament running on http://localhost:${PORT}`));
+const websocketHeartbeat = setInterval(() => {
+  for (const socket of clients) {
+    if (!socket.isAlive) {
+      socket.terminate();
+      clients.delete(socket);
+      continue;
+    }
+    socket.isAlive = false;
+    socket.ping();
+  }
+}, 30000);
+websocketHeartbeat.unref();
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Tekken Tournament running on http://localhost:${PORT}`);
+  if (!process.env.OPERATOR_TOKEN) console.log(`Operator token: ${operatorToken}`);
+});

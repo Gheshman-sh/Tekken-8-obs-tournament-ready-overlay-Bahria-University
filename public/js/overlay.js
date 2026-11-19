@@ -3,6 +3,8 @@
   const video = document.getElementById('replay-video');
   const set = (key, value) => document.querySelectorAll(`[data-bind="${key}"]`).forEach(element => { element.textContent = value === null || value === undefined ? '' : String(value); });
   let activeReplayUrl = '';
+  let activeReplayId = '';
+  let activeReplayToken = '';
   let previousMode = '';
   let transitionToken = 0;
   let activeMode = '';
@@ -42,6 +44,11 @@
         return entering ? [{ opacity: 0, filter: 'blur(8px)', transform: 'scale(1.025)' }, { opacity: 1, filter: 'blur(0)', transform: 'scale(1)' }] : [{ opacity: 1, filter: 'blur(0)' }, { opacity: 0, filter: 'blur(5px)', transform: 'scale(.985)' }];
       default:
         return entering ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }];
+    }
+
+    function setReplayIdentity(replay) {
+      activeReplayId = replay && replay.id ? String(replay.id) : '';
+      activeReplayToken = replay && replay.token ? String(replay.token) : '';
     }
   };
   function transitionConfig(state, mode) {
@@ -150,10 +157,13 @@
   let statusRequest = Promise.resolve();
 
   function reportReplayStatus(status, message) {
+    if (!activeReplayId || !activeReplayToken) return Promise.resolve();
+    const replayId = activeReplayId;
+    const token = activeReplayToken;
     statusRequest = statusRequest.then(() => fetch('/api/replay/browser-status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, message })
+      body: JSON.stringify({ status, message, replayId, token })
     })).catch(() => { });
     return statusRequest;
   }
@@ -275,8 +285,14 @@
     overlay.classList.toggle('show-players', settings.showPlayers !== false);
     overlay.classList.toggle('no-animations', settings.animationsEnabled === false);
     document.querySelector('.replay-badge').hidden = !(settings.showReplayIndicator && (mode === 'replay' || mode === 'replay_intro'));
-    if (state.replayActive && state.activeReplay) playReplay(new URL(state.activeReplay.url, location.href).href);
-    if (!state.replayActive && mode !== 'replay') hideReplayVideo();
+    if (state.replayActive && state.activeReplay) {
+      setReplayIdentity(state.activeReplay);
+      playReplay(new URL(state.activeReplay.url, location.href).href);
+    }
+    if (!state.replayActive && mode !== 'replay') {
+      setReplayIdentity(null);
+      hideReplayVideo();
+    }
   }
 
   video.addEventListener('canplay', () => {
@@ -284,8 +300,14 @@
   });
   video.addEventListener('playing', () => reportReplayStatus('playing'));
   video.addEventListener('ended', () => {
+    const replayId = activeReplayId;
+    const token = activeReplayToken;
     hideReplayVideo();
-    fetch('/api/replay/browser-ended', { method: 'POST' }).catch(() => { });
+    fetch('/api/replay/browser-ended', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replayId, token })
+    }).catch(() => { });
   });
   video.addEventListener('error', () => {
     reportReplayStatus('error', 'Replay video could not be loaded in the OBS Browser Source.');
@@ -297,12 +319,16 @@
       const message = JSON.parse(event.data);
       if (message.state) render(message.state);
       if (message.type === 'replay' && message.active && message.replay) {
+        setReplayIdentity(message.replay);
         if (activeMode !== 'replay') {
           transitionTo(latestState || {}, activeMode || previousMode || 'gameplay', 'replay');
         }
         playReplay(new URL(message.replay.url, location.href).href);
       }
-      if (message.type === 'replay' && !message.active) hideReplayVideo();
+      if (message.type === 'replay' && !message.active) {
+        setReplayIdentity(null);
+        hideReplayVideo();
+      }
       if (message.type === 'transitionPreview') {
         const activeElement = document.querySelector('.overlay .state') && Array.from(document.querySelectorAll('.overlay .state')).find(element => getComputedStyle(element).display !== 'none');
         if (activeElement) {

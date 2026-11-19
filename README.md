@@ -49,6 +49,12 @@ Run a live Tekken 8 tournament from a browser-based control panel, connect OBS S
 5. Add the overlay browser source described below.
 6. Connect OBS from the control panel's **System** section.
 
+The first control-panel load asks for an operator token. When `OPERATOR_TOKEN` is not
+configured, the server creates a local token in `data/operator-token` and prints it
+to the server console. Set `OPERATOR_TOKEN` in the environment before starting the
+server if you want to manage the token explicitly. The overlay remains read-only;
+replay browser callbacks are accepted only for the currently active replay.
+
 You can also start the system from PowerShell:
 
 ```powershell
@@ -202,8 +208,12 @@ The server stores persistent state in:
 - `data/tournament.json`
 - `data/replays.json`
 - `data/processed-replays/`
+- `data/guest-media/`
 
-Default runtime data is created automatically when the server first starts. Runtime replay and tournament state are excluded from Git, while the application source is licensed under the MIT License.
+Default runtime data is created automatically when the server first starts. Existing
+guest photographs are migrated to `data/guest-media/` while retaining JSON backups.
+Runtime replay and tournament state are excluded from Git, while the application
+source is licensed under the MIT License.
 
 ## License
 

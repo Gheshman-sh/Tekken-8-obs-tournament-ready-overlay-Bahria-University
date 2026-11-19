@@ -5,6 +5,10 @@ data/tournament.json
 data/guest-profiles.json
 data/obs-credentials.json
 data/.obs-credentials.key
+data/operator-token
+data/guest-media/
+data/*.bak
+data/*.corrupt-*
 data/youtube-preview.json
 .env
 .env.*

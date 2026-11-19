@@ -12,6 +12,7 @@
   let guestProfiles = [];
   let selectedGuestProfileId = '';
   let rememberObsCredentials = false;
+  let timerDisplayInterval;
   const get = (object, path) => path.split('.').reduce((value, key) => value && value[key], object);
   const set = (object, path, value) => { const keys = path.split('.'); const last = keys.pop(); const target = keys.reduce((item, key) => item[key], object); target[last] = value; };
   function notify(message, type = 'success') {
@@ -27,6 +28,7 @@
     noticeTimer = setTimeout(() => { notice.className = 'notice'; }, type === 'error' ? 8000 : 3500);
   }
   function friendlyError(message) {
+    if (/state changed in another control panel/i.test(message)) return 'Another control panel changed the tournament state. Review the latest values and try again.';
     if (/replay buffer is not running/i.test(message)) return 'Replay buffer is stopped. Start the Replay Buffer in OBS before saving a replay.';
     if (/replay.*processing|ffmpeg/i.test(message)) return 'Replay processing failed. Check that FFmpeg is installed and the saved clip is available.';
     if (/replay.*not found|replay file/i.test(message)) return 'Replay operation failed. The selected replay file is unavailable.';
@@ -87,13 +89,24 @@
     const timer = state && state.broadcast && state.broadcast.timer;
     const remaining = timer ? Math.ceil(Math.max(0, timer.endsAt - Date.now()) / 1000) : 0;
     document.getElementById('broadcast-timer-remaining').textContent = remaining ? `${remaining}s → ${timer.nextMode.replace('_', ' ')}` : 'Manual';
+    if (timer && !timerDisplayInterval) timerDisplayInterval = setInterval(updateTimerDisplay, 1000);
+    if (!timer && timerDisplayInterval) {
+      clearInterval(timerDisplayInterval);
+      timerDisplayInterval = null;
+    }
   }
   async function save() {
     const snapshot = JSON.stringify(state);
     saveQueue = saveQueue.catch(() => {}).then(async () => {
       const response = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: snapshot });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to save state.');
+      if (!response.ok) {
+        if (response.status === 409 && data.state) {
+          state = data.state;
+          render();
+        }
+        throw new Error(data.error || 'Unable to save state.');
+      }
       state = data.state;
       render();
     });
@@ -143,11 +156,16 @@
   function loadYouTubeApi() {
     if (youtubeApiLoaded || window.YT && window.YT.Player) return Promise.resolve();
     youtubeApiLoaded = true;
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       window.onYouTubeIframeAPIReady = () => resolve();
       const script = document.createElement('script');
       script.src = 'https://www.youtube.com/iframe_api';
-      script.onerror = () => setPreviewStatus('Connection error', 'YouTube preview unavailable', 'The YouTube IFrame API could not be loaded.');
+      script.onerror = () => {
+        youtubeApiLoaded = false;
+        script.remove();
+        setPreviewStatus('Connection error', 'YouTube preview unavailable', 'The YouTube IFrame API could not be loaded.');
+        reject(new Error('The YouTube IFrame API could not be loaded.'));
+      };
       document.head.appendChild(script);
     });
   }
@@ -534,10 +552,19 @@
   document.querySelectorAll('[data-score-action]').forEach(button => button.addEventListener('click', async () => { const [player, delta] = button.dataset.scoreAction.split(':'); remember(); state[player].score = Math.max(0, state[player].score + Number(delta)); try { await save(); notify('Score updated.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.querySelectorAll('[data-triangle-action]').forEach(button => button.addEventListener('click', async () => { const [player, index] = button.dataset.triangleAction.split(':'); remember(); state[player].triangles = Number(index) < state[player].triangles ? Number(index) : Number(index) + 1; try { await save(); notify('Triangle markers updated.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));
   document.getElementById('swap').onclick = async () => { remember();[state.player1, state.player2] = [state.player2, state.player1]; try { await save(); notify('Player sides swapped.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
-  document.getElementById('next-game').onclick = async () => { remember(); state.gameNumber = Number(state.gameNumber || 1) + 1; try { await save(); notify('Next game started.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
+  document.getElementById('next-game').onclick = async () => {
+    remember();
+    const result = await action('/api/match/next-game', { method: 'POST' }, 'Next game started.', document.getElementById('next-game'));
+    if (!result) undoStack.pop();
+  };
   document.getElementById('reset-scores').onclick = async () => { remember(); state.player1.score = 0; state.player2.score = 0; try { await save(); notify('Scores reset.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.getElementById('reset-triangles').onclick = async () => { remember(); state.player1.triangles = 0; state.player2.triangles = 0; try { await save(); notify('Triangle markers reset.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
-  document.getElementById('clear-match').onclick = async () => { if (!window.confirm('Clear the current match data?')) return; remember(); state.player1 = { name: '', character: '', score: 0 }; state.player2 = { name: '', character: '', score: 0 }; try { await save(); notify('Match cleared.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
+  document.getElementById('clear-match').onclick = async () => {
+    if (!window.confirm('Clear the current match data?')) return;
+    remember();
+    const result = await action('/api/match/clear', { method: 'POST' }, 'Match cleared.', document.getElementById('clear-match'));
+    if (!result) undoStack.pop();
+  };
   document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
   document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));
   document.querySelectorAll('[data-timer-action]').forEach(button => button.onclick = () => action('/api/broadcast/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.timerAction }) }, 'Broadcast timer updated.', button));
@@ -590,7 +617,25 @@
     };
   }
   connectControlSocket();
-  Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())]).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); loadSavedYouTubePreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
+  async function authenticateOperator() {
+    const statusResponse = await fetch('/api/auth/status');
+    const status = await statusResponse.json();
+    if (status.authenticated) return true;
+    const token = window.prompt('Enter the operator token shown in the server console:');
+    if (!token) {
+      notify('Operator authentication is required for control actions.', 'error');
+      return false;
+    }
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Operator authentication failed.');
+    return Boolean(data.authenticated);
+  }
+  authenticateOperator().then(() => Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())])).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); loadSavedYouTubePreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
   const previewPanel = document.querySelector('.preview-panel');
   let previewStuck = false;
   let previewPlaceholder = null;
