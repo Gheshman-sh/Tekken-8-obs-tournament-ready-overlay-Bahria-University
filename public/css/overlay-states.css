@@ -1,0 +1,576 @@
+/* ==========================================================================
+   OVERLAY — DESIGN SYSTEM + PRESENTATION STATES
+   Canvas: 1920x1080. 1rem == 10 design-px (html font-size scales with width),
+   so every number below reads as design-px / 10.
+   Active Gameplay layout lives in overlay.css and is not restyled here; this
+   file only appends additive depth to it (see the last section).
+   Player identity follows the existing HUD: P1 = red, P2 = blue.
+   ========================================================================== */
+
+html { font-size: calc(100vw / 192) }
+
+/* ---------- 1. tokens ---------- */
+.overlay {
+  --font-display: "Bahnschrift", "Arial Narrow", "Roboto Condensed", "Liberation Sans Narrow", "Segoe UI", sans-serif;
+  --font-ui: "Inter", "Segoe UI", Arial, sans-serif;
+
+  --base: #0a0c10;
+  --panel: #0f1217;
+  --panel-raised: #151921;
+  --plate: #f3f4f6;
+  --line: rgba(255, 255, 255, .1);
+  --text: #f5f7fa;
+  --text-dim: #a4acb8;
+  --text-mute: #727b88;
+
+  --p1: var(--red);
+  --p2: var(--blue);
+  --p1-wash: rgba(255, 71, 72, .09);
+  --p2-wash: rgba(69, 153, 255, .1);
+  --p1-deep: #231418;
+  --p2-deep: #101c30;
+
+  --ease-out: cubic-bezier(.2, .75, .2, 1);
+  --shimmer-dur: 19s;
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+/* ---------- 2. shared type roles ---------- */
+.micro-label {
+  display: block;
+  color: var(--text-dim);
+  font: 700 1.5rem/1 var(--font-ui);
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+
+.state-intro, .state-transition, .state-winner, .state-standby,
+.state-special-guest, .state-replay-intro { text-transform: uppercase }
+
+.state-intro strong, .state-transition strong, .state-winner strong, .state-winner b,
+.state-standby strong, .state-replay-intro strong, .state-special-guest strong {
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.tick {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: .6rem;
+  height: 4.8rem;
+  background: linear-gradient(180deg, var(--p1) 50%, var(--p2) 50%);
+}
+
+/* ---------- 3. geometry + shimmer utilities ---------- */
+.geo { position: absolute; inset: 0; z-index: 0; pointer-events: none }
+.geo > i { position: absolute; inset: 0; display: block }
+.geo-zone { overflow: hidden }
+.geo-tri { opacity: 1 }
+.geo-line { background: rgba(255, 255, 255, .09) }
+
+/* wide, soft, slow highlight; lives on a pseudo-element, animates transform only */
+.shimmer { position: relative; overflow: hidden }
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 55%;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, .055) 50%, transparent 100%);
+  transform: translateX(-120%);
+  animation: shimmer-sweep var(--shimmer-dur) ease-in-out infinite;
+  animation-delay: var(--shimmer-delay, 0s);
+  pointer-events: none;
+}
+.geo .shimmer { position: absolute }   /* keep geometry layers absolutely placed */
+
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-120%) }
+  55%  { transform: translateX(300%) }
+  100% { transform: translateX(300%) }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(1.6rem) }
+  to   { opacity: 1; transform: none }
+}
+@keyframes from-left {
+  from { opacity: 0; transform: translateX(-6rem) }
+  to   { opacity: 1; transform: none }
+}
+@keyframes from-right {
+  from { opacity: 0; transform: translateX(6rem) }
+  to   { opacity: 1; transform: none }
+}
+
+/* ==========================================================================
+   MATCH INTRO — opposing red / blue zones split on a shared diagonal
+   ========================================================================== */
+.state-intro { background: var(--base) }
+.state-intro > :not(.geo) { z-index: 1 }
+
+.zone-p1 { clip-path: polygon(0 0, 59% 0, 41% 100%, 0 100%); background: linear-gradient(100deg, var(--p1-deep), var(--panel) 85%) }
+.zone-p2 { clip-path: polygon(61% 0, 100% 0, 100% 100%, 43% 100%); background: linear-gradient(260deg, var(--p2-deep), var(--panel) 85%); --shimmer-delay: -9s }
+.intro-tri-p1 { clip-path: polygon(0 100%, 0 34%, 33% 100%); background: var(--p1-wash) }
+.intro-tri-p2 { clip-path: polygon(100% 0, 100% 62%, 66% 0); background: var(--p2-wash) }
+.intro-line { clip-path: polygon(55% 0, 55.07% 0, 37.07% 100%, 37% 100%) }
+.intro-edge-p1 { clip-path: polygon(58.55% 0, 59% 0, 41% 100%, 40.55% 100%); background: var(--p1) }
+.intro-edge-p2 { clip-path: polygon(61% 0, 61.45% 0, 43.45% 100%, 43% 100%); background: var(--p2) }
+
+.intro-head {
+  position: absolute;
+  top: 5.6rem; left: 8rem; right: 8rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  animation: rise .6s var(--ease-out) .1s both;
+}
+.lockup { display: flex; gap: 1.6rem; align-items: stretch }
+.lockup strong { display: block; margin-top: 1rem; font-size: 3.2rem; line-height: 1; letter-spacing: .06em }
+.intro-meta { text-align: right }
+.intro-meta strong { display: block; margin-top: 1rem; font-size: 3.2rem; line-height: 1; letter-spacing: .06em }
+
+.intro-player {
+  position: absolute;
+  top: 36rem;
+  width: 82rem;
+}
+.intro-one { left: 8rem; animation: from-left .7s var(--ease-out) .18s both }
+.intro-two { right: 8rem; text-align: right; animation: from-right .7s var(--ease-out) .18s both }
+.intro-player .micro-label { color: var(--p1) }
+.intro-two .micro-label { color: var(--p2) }
+.intro-player strong {
+  display: block;
+  margin: 1.6rem 0 1.8rem;
+  font-size: min(14rem, calc(135rem / var(--n, 8)));
+  line-height: .95;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.intro-player small {
+  display: block;
+  color: var(--text-dim);
+  font: 700 2.4rem/1 var(--font-display);
+  letter-spacing: .2em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.intro-player small:empty { display: none }
+
+.intro-vs {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.2rem;
+  animation: vs-in .6s var(--ease-out) .35s both;
+}
+.intro-vs b { font: 900 9.6rem/1 var(--font-display); letter-spacing: .04em; color: var(--text) }
+.intro-vs i { width: .2rem; height: 9rem; background: var(--line) }
+@keyframes vs-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.82) }
+  to   { opacity: 1; transform: translate(-50%, -50%) }
+}
+
+.intro-foot {
+  position: absolute;
+  left: 8rem; bottom: 6.2rem;
+  display: flex;
+  align-items: center;
+  gap: 2.4rem;
+  font: 700 2.2rem/1 var(--font-ui);
+  letter-spacing: .22em;
+  color: var(--text-dim);
+  animation: rise .6s var(--ease-out) .45s both;
+}
+.intro-foot i { width: .2rem; height: 2.2rem; background: var(--text-mute) }
+.intro-foot span:empty, .intro-foot span:empty + i { display: none }
+
+/* ==========================================================================
+   GAME TRANSITION — compact horizontal band, plate + chevrons for momentum
+   ========================================================================== */
+.state-transition > .trans-band {
+  position: absolute;
+  left: 0; right: 0; top: 38rem;
+  height: 30rem;
+  display: grid;
+  grid-template-columns: 1fr 64rem 1fr;
+  align-items: center;
+  background: rgba(10, 12, 16, .95);
+  animation: band-in .55s var(--ease-out) both;
+  --shimmer-dur: 14s;
+}
+.trans-band::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: .5rem;
+  background: linear-gradient(90deg, var(--p1) 50%, var(--p2) 50%);
+}
+@keyframes band-in {
+  from { clip-path: inset(0 50% 0 50%) }
+  to   { clip-path: inset(0 0 0 0) }
+}
+
+.trans-side {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+  min-width: 0;
+  padding: 0 7rem;
+}
+.trans-one { justify-content: flex-end }
+.trans-two { justify-content: flex-start }
+.trans-side strong {
+  min-width: 0;
+  font-size: min(6rem, calc(52rem / var(--n, 8)));
+  line-height: 1;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trans-side b { flex: 0 0 auto; font: 900 13rem/1 var(--font-display) }
+.trans-one b { color: var(--p1) }
+.trans-two b { color: var(--p2) }
+
+.trans-plate {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  background: var(--plate);
+  color: var(--base);
+  clip-path: polygon(5rem 0, 100% 0, calc(100% - 5rem) 100%, 0 100%);
+  margin-top: .5rem;
+  animation: rise .5s var(--ease-out) .15s both;
+}
+.trans-plate .micro-label { color: #5b626d }
+.trans-plate > strong { font-size: 12.6rem; line-height: .9; letter-spacing: .02em }
+.trans-round { font: 800 2.2rem/1 var(--font-ui); letter-spacing: .22em; color: #3a4049 }
+.trans-round:empty { display: none }
+
+.trans-chevrons {
+  display: flex;
+  gap: .9rem;
+  margin-top: .6rem;
+}
+.trans-chevrons i {
+  width: 1.6rem; height: 2.4rem;
+  background: #aeb4bd;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  animation: chevron 1.6s ease-in-out infinite;
+}
+.trans-chevrons i:nth-child(2) { animation-delay: .2s }
+.trans-chevrons i:nth-child(3) { animation-delay: .4s }
+@keyframes chevron { 0%, 100% { opacity: .25 } 40% { opacity: 1 } }
+
+/* ==========================================================================
+   WINNER — asymmetric panel anchored to the winner's side, accent per player
+   P2 is the same composition mirrored (geometry flipped, text anchored right).
+   ========================================================================== */
+.state-winner { --accent: var(--p1); --wash: var(--p1-wash); --flip: 1 }
+.overlay[data-winner="2"] .state-winner { --accent: var(--p2); --wash: var(--p2-wash); --flip: -1 }
+
+.win-geo { transform: scaleX(var(--flip)) }
+.win-panel { clip-path: polygon(0 0, 67% 0, 53% 100%, 0 100%); background: var(--panel); opacity: .96 }
+.win-tri { clip-path: polygon(0 100%, 0 18%, 49% 100%); background: var(--wash) }
+.win-line { clip-path: polygon(64% 0, 64.07% 0, 50.07% 100%, 50% 100%) }
+.win-edge { clip-path: polygon(65.4% 0, 67% 0, 53% 100%, 51.4% 100%); background: var(--accent) }
+.state-winner .win-panel { animation: panel-in .7s var(--ease-out) both }
+@keyframes panel-in {
+  from { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%) }
+  to   { clip-path: polygon(0 0, 67% 0, 53% 100%, 0 100%) }
+}
+
+.win-copy {
+  position: absolute;
+  z-index: 1;
+  top: 27rem;
+  left: 9rem;
+  width: 96rem;
+  text-align: left;
+}
+.overlay[data-winner="2"] .win-copy { left: auto; right: 9rem; text-align: right }
+
+.win-kicker { display: flex; align-items: center; gap: 1.4rem; color: var(--text-dim); animation: rise .5s var(--ease-out) .3s both }
+.win-kicker .tick { height: 2.6rem; background: var(--accent) }
+.overlay[data-winner="2"] .win-kicker { flex-direction: row-reverse }
+
+.winner-label {
+  display: block;
+  margin: 3rem 0 1rem;
+  color: var(--accent);
+  font-size: 9rem;
+  line-height: 1;
+  letter-spacing: .16em;
+  animation: rise .5s var(--ease-out) .38s both;
+}
+.winner-name {
+  display: block;
+  font: 800 15rem/1 var(--font-display);
+  font-size: min(15rem, calc(158rem / var(--n, 8)));
+  letter-spacing: .01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: rise .55s var(--ease-out) .46s both;
+}
+
+.win-meta {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 3.2rem;
+  color: var(--text-dim);
+  font: 700 2.4rem/1 var(--font-ui);
+  letter-spacing: .2em;
+  animation: rise .5s var(--ease-out) .54s both;
+}
+.overlay[data-winner="2"] .win-meta { justify-content: flex-end }
+.win-meta i { width: .2rem; height: 2.4rem; background: var(--text-mute) }
+.win-meta span:empty, .win-meta span:empty + i { display: none }
+
+.winner-score {
+  display: flex;
+  align-items: center;
+  gap: 2.4rem;
+  margin-top: 5rem;
+  font: 900 8rem/1 var(--font-display);
+  color: var(--text-mute);
+  animation: rise .5s var(--ease-out) .62s both;
+}
+.overlay[data-winner="2"] .winner-score { justify-content: flex-end }
+.winner-score i { width: 5rem; height: .4rem; background: var(--text-mute) }
+.overlay:not([data-winner="2"]) .winner-score .ws-1,
+.overlay[data-winner="2"] .winner-score .ws-2 { color: var(--accent) }
+
+/* ==========================================================================
+   TOURNAMENT STANDBY — spacious, typographic, slow ambient shimmer
+   ========================================================================== */
+.state-standby { background: var(--base) }
+.state-standby > :not(.geo) { z-index: 1 }
+
+.sb-panel { clip-path: polygon(30% 0, 100% 0, 70% 100%, 0 100%); background: var(--panel); --shimmer-dur: 26s }
+.sb-tri-base { clip-path: polygon(0 100%, 0 72%, 36% 100%); background: var(--panel-raised) }
+.sb-tri-blue { clip-path: polygon(0 0, 44% 0, 0 76%); background: var(--p2-wash) }
+.sb-tri-red { clip-path: polygon(100% 100%, 100% 24%, 56% 100%); background: var(--p1-wash) }
+.sb-line-a { clip-path: polygon(0 77.4%, 0 77%, 44.2% 0, 44.6% 0) ; background: rgba(69, 153, 255, .35) }
+.sb-line-b { clip-path: polygon(100% 23%, 100% 22.6%, 56.2% 100%, 55.8% 100%); background: rgba(255, 71, 72, .35) }
+
+.sb-copy { position: absolute; left: 12rem; top: 34rem; width: 140rem; animation: rise .8s var(--ease-out) .15s both }
+.sb-kicker { display: flex; align-items: center; gap: 1.6rem }
+.sb-kicker .tick { height: 3rem }
+.sb-title {
+  display: block;
+  margin: 2.8rem 0 0;
+  max-width: 120rem;
+  font: 800 12.4rem/.96 var(--font-display);
+  letter-spacing: .01em;
+}
+.sb-status {
+  display: flex;
+  align-items: center;
+  gap: 2.4rem;
+  margin-top: 4.4rem;
+  color: var(--text-dim);
+  font: 700 2.4rem/1 var(--font-ui);
+  letter-spacing: .34em;
+}
+.sb-status i { width: 14rem; height: .3rem; background: linear-gradient(90deg, var(--p1) 50%, var(--p2) 50%) }
+
+.sb-next {
+  position: absolute;
+  right: 10rem; bottom: 8rem;
+  text-align: right;
+  animation: rise .8s var(--ease-out) .35s both;
+}
+.sb-vs { display: flex; align-items: center; justify-content: flex-end; gap: 2.4rem; margin-top: 1.6rem }
+.sb-vs strong { font-size: min(5rem, calc(70rem / var(--n, 8))); line-height: 1; letter-spacing: .03em; max-width: 44rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.sb-p1 { box-shadow: inset 0 -.5rem 0 var(--p1); padding-bottom: .8rem }
+.sb-p2 { box-shadow: inset 0 -.5rem 0 var(--p2); padding-bottom: .8rem }
+.sb-vs b { font: 900 2.4rem/1 var(--font-display); color: var(--text-mute); letter-spacing: .16em }
+.sb-round {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.8rem;
+  margin-top: 2.2rem;
+  color: var(--text-dim);
+  font: 700 2rem/1 var(--font-ui);
+  letter-spacing: .22em;
+}
+.sb-round i { width: .2rem; height: 2rem; background: var(--text-mute) }
+
+/* ==========================================================================
+   REPLAY INTRO (3s) — same split language, centred title
+   ========================================================================== */
+.overlay[data-mode="replay_intro"] .state-replay-intro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  background: var(--base);
+}
+.state-replay-intro > :not(.geo) { position: relative; z-index: 1 }
+.ri-zone-p1 { clip-path: polygon(0 0, 24% 0, 8% 100%, 0 100%); background: linear-gradient(100deg, var(--p1-deep), var(--panel) 90%) }
+.ri-zone-p2 { clip-path: polygon(92% 0, 100% 0, 100% 100%, 76% 100%); background: linear-gradient(260deg, var(--p2-deep), var(--panel) 90%); --shimmer-delay: -9s }
+.ri-edge-p1 { clip-path: polygon(23.6% 0, 24% 0, 8% 100%, 7.6% 100%); background: var(--p1) }
+.ri-edge-p2 { clip-path: polygon(92% 0, 92.4% 0, 76.4% 100%, 76% 100%); background: var(--p2) }
+
+.replay-intro-kicker {
+  color: var(--text-dim);
+  font: 700 1.9rem/1 var(--font-ui);
+  letter-spacing: .34em;
+  animation: rise .6s var(--ease-out) both;
+}
+.state-replay-intro strong {
+  margin: 2.4rem 0 1.8rem;
+  font: 900 15rem/.95 var(--font-display);
+  letter-spacing: .06em;
+  animation: rise .7s var(--ease-out) .1s both;
+}
+.replay-intro-subtitle {
+  color: var(--text-dim);
+  font: 700 2.4rem/1 var(--font-ui);
+  letter-spacing: .4em;
+  animation: rise .6s var(--ease-out) .2s both;
+}
+.replay-intro-line {
+  width: 30rem; height: .4rem;
+  margin-top: 3.2rem;
+  background: linear-gradient(90deg, var(--p1) 50%, var(--p2) 50%);
+  transform-origin: left;
+  animation: line-grow .9s var(--ease-out) .25s both;
+}
+@keyframes line-grow { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.state-replay-intro small {
+  margin-top: 2.2rem;
+  color: var(--text-mute);
+  font: 700 1.8rem/1 var(--font-ui);
+  letter-spacing: .34em;
+  animation: rise .6s var(--ease-out) .3s both;
+}
+
+/* ==========================================================================
+   SPECIAL GUEST — dark panel from the left, photo in an angled frame
+   ========================================================================== */
+.state-special-guest { padding: 0; background: none }
+.guest-panel { clip-path: polygon(0 0, 72% 0, 56% 100%, 0 100%); background: var(--panel); opacity: .96 }
+.guest-tri { clip-path: polygon(0 100%, 0 40%, 30% 100%); background: var(--p2-wash) }
+.guest-edge { clip-path: polygon(70.6% 0, 72% 0, 56% 100%, 54.6% 100%); background: var(--p1) }
+.guest-accent { position: absolute; z-index: 1; left: 0; top: 22%; bottom: 22%; width: .6rem; background: linear-gradient(180deg, var(--p1) 50%, var(--p2) 50%) }
+.guest-content {
+  position: absolute;
+  z-index: 1;
+  left: 12rem; top: 50%;
+  width: 82rem;
+  transform: translateY(-50%);
+  animation: from-left .7s var(--ease-out) .1s both;
+}
+.guest-content > .micro-label { margin-bottom: 2.4rem; color: var(--p1) }
+.guest-name { display: block; font-size: 8.4rem; line-height: .98; letter-spacing: .01em }
+.guest-title, .guest-organization, .guest-subtitle { display: block; margin-top: 1.6rem; color: var(--text); font: 600 2.6rem/1.15 var(--font-ui); letter-spacing: .1em }
+.guest-organization { color: var(--text-dim); font-size: 2.2rem }
+.guest-subtitle { margin-top: 3rem; color: var(--text-mute); font-size: 1.7rem; letter-spacing: .24em }
+.guest-title:empty, .guest-organization:empty, .guest-subtitle:empty { display: none }
+.guest-photo-frame {
+  position: absolute;
+  z-index: 1;
+  right: 8rem; top: 17rem;
+  width: 48rem; height: 66rem;
+  display: none;
+  overflow: hidden;
+  background: var(--panel-raised);
+  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
+  box-shadow: none;
+  border: 0;
+}
+.guest-photo-frame.has-photo { display: block }
+.guest-photo { width: 100%; height: 100%; object-fit: cover; object-position: center top }
+.guest-branding {
+  position: absolute;
+  z-index: 1;
+  left: 12rem; bottom: 6.4rem;
+  color: var(--text-mute);
+  font: 700 1.6rem/1 var(--font-ui);
+  letter-spacing: .26em;
+}
+
+/* ==========================================================================
+   REPLAY — video stays the only large element; one small angled tag
+   ========================================================================== */
+.replay-badge {
+  position: absolute;
+  z-index: 5;
+  right: 6rem;
+  top: 11.6rem;
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 1.2rem 3rem 1.2rem 1.8rem;
+  background: rgba(10, 12, 16, .92);
+  color: var(--text);
+  font: 800 1.9rem/1 var(--font-ui);
+  letter-spacing: .26em;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 1.4rem) 100%, 0 100%);
+  box-shadow: none;
+  border: 0;
+}
+.replay-badge[hidden], .overlay[data-mode="replay_intro"] .replay-badge { display: none }
+.replay-badge::before {
+  content: "";
+  width: .6rem; height: 2.4rem;
+  background: linear-gradient(180deg, var(--p1) 50%, var(--p2) 50%);
+}
+
+/* ==========================================================================
+   ACTIVE GAMEPLAY — additive depth only. Layout, type and score presentation
+   in overlay.css are untouched; these rules only add (a) a faint triangular
+   facet inside each name panel and (b) a slow low-opacity sheen on HUD plates.
+   ========================================================================== */
+.gameplay-one .gameplay-name,
+.gameplay-two .gameplay-name {
+  background:
+    linear-gradient(var(--ink), var(--ink)) left bottom / 100% var(--bar) no-repeat,
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(to top left, rgba(0, 0, 0, .09) 50%, transparent 50%) right bottom / 38% 100% no-repeat,
+    var(--accent);
+}
+.gameplay-two .gameplay-name {
+  background:
+    linear-gradient(var(--ink), var(--ink)) left bottom / 100% var(--bar) no-repeat,
+    linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(to top right, rgba(0, 0, 0, .09) 50%, transparent 50%) left bottom / 38% 100% no-repeat,
+    var(--accent);
+}
+.gameplay-name::after, .gameplay-center::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 45%;
+  background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, .13) 50%, transparent 100%);
+  mix-blend-mode: soft-light;
+  transform: translateX(-120%);
+  animation: shimmer-sweep 22s ease-in-out infinite;
+  pointer-events: none;
+}
+.gameplay-two .gameplay-name::after { animation-delay: -8s }
+.gameplay-center::after { animation-delay: -15s }
+
+/* ---------- motion preferences ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after, .gameplay-name::after, .gameplay-center::after,
+  .trans-chevrons i { animation: none }
+  .shimmer::after, .gameplay-name::after, .gameplay-center::after { display: none }
+  .state-intro *, .state-transition *, .state-winner *, .state-standby *,
+  .state-replay-intro *, .state-special-guest * { animation-duration: .01s !important; animation-delay: 0s !important }
+}

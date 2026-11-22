@@ -133,6 +133,8 @@ If the command is not recognized, install FFmpeg and add its `bin` folder to the
 
 ## Using the control panel
 
+The control panel is laid out for live operation. The top bar shows server, OBS, replay-buffer and on-air state. **Broadcast**, **Match** (scores and players) and **Instant replay** sit in the main workspace; OBS connection, overlay behaviour, presentation timers, special guest, transition animations and keyboard shortcuts live in **System & setup** below it. Destructive actions (Reset scores, Clear match, Delete replay) are separated and outlined in red.
+
 ### Match information
 
 Update the tournament name, round, round time, game number, player names, characters, and notes in the control panel. Changes synchronize to connected overlay clients.
@@ -164,6 +166,8 @@ Timer controls include skip, extend by five seconds, cancel, and return to gamep
 3. Wait for OBS to save the replay and FFmpeg to finish processing.
 4. The replay is loaded into the overlay Browser Source and played at 0.5x speed with synchronized audio.
 5. Use **Stop playback** to return immediately to gameplay.
+
+The replay library lists saved replays with **Play**, **Rename** and **Delete** (delete asks for confirmation). **Stop playback** stays available while a replay is running.
 
 Original OBS replay buffer recordings are never overwritten. Processed files and replay metadata are stored locally; the replay library supports renaming and deleting entries from the control panel.
 

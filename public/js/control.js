@@ -40,7 +40,7 @@
   function setButtonLoading(button, loading, label) {
     if (!button) return;
     if (loading) {
-      button.dataset.originalLabel = button.textContent;
+      button.dataset.originalLabel = button.innerHTML;
       button.disabled = true;
       button.classList.add('is-loading');
       if (label) button.textContent = label;
@@ -48,7 +48,7 @@
       button.disabled = false;
       button.classList.remove('is-loading');
       if (button.dataset.originalLabel) {
-        button.textContent = button.dataset.originalLabel;
+        button.innerHTML = button.dataset.originalLabel;
         delete button.dataset.originalLabel;
       }
     }
@@ -74,11 +74,12 @@
       button.setAttribute('aria-pressed', String(enabled));
     });
     const mode = state.broadcast && state.broadcast.mode || 'gameplay';
-    const stateLabel = mode.replace('_', ' ').toUpperCase();
+    const stateLabel = mode.replace(/_/g, ' ').toUpperCase();
     document.getElementById('broadcast-state').textContent = stateLabel;
     document.getElementById('preview-state').textContent = `State: ${stateLabel}`;
     document.getElementById('client-count').textContent = state.connectedClients == null ? '—' : state.connectedClients;
-    document.querySelectorAll('[data-broadcast]').forEach(button => button.classList.toggle('active', button.dataset.broadcast === mode));
+    const activeWinner = state.broadcast && state.broadcast.winner;
+    document.querySelectorAll('[data-broadcast]').forEach(button => button.classList.toggle('active', button.dataset.broadcast === mode && (!button.dataset.winner || Number(button.dataset.winner) === activeWinner)));
     document.querySelectorAll('[data-transition-state]').forEach(select => {
       select.value = get(state.transitionOverrides || {}, select.dataset.transitionState) || '';
     });
@@ -88,7 +89,10 @@
   function updateTimerDisplay() {
     const timer = state && state.broadcast && state.broadcast.timer;
     const remaining = timer ? Math.ceil(Math.max(0, timer.endsAt - Date.now()) / 1000) : 0;
-    document.getElementById('broadcast-timer-remaining').textContent = remaining ? `${remaining}s → ${timer.nextMode.replace('_', ' ')}` : 'Manual';
+    document.getElementById('broadcast-timer-remaining').textContent = remaining ? `${remaining}s → ${timer.nextMode.replace(/_/g, ' ')}` : 'Manual';
+    const fill = document.getElementById('timer-fill');
+    if (fill) fill.style.width = timer && timer.endsAt > timer.startedAt ? `${Math.max(0, Math.min(100, (timer.endsAt - Date.now()) / (timer.endsAt - timer.startedAt) * 100))}%` : '0%';
+    document.querySelectorAll('[data-timer-action="skip"], [data-timer-action="extend"], [data-timer-action="cancel"]').forEach(button => { button.disabled = !timer; });
     if (timer && !timerDisplayInterval) timerDisplayInterval = setInterval(updateTimerDisplay, 1000);
     if (!timer && timerDisplayInterval) {
       clearInterval(timerDisplayInterval);
@@ -112,6 +116,7 @@
     });
     await saveQueue;
   }
+  function setConnection(text, kind) { const chip = document.getElementById('save-status'); chip.textContent = text; chip.dataset.state = kind; }
   function snapshot() { return JSON.parse(JSON.stringify(state)); }
   function remember() { undoStack.push(snapshot()); if (undoStack.length > 20) undoStack.shift(); }
   async function action(url, options, message = 'Action completed.', button, loadingLabel = 'Working…') {
@@ -293,7 +298,7 @@
     status.textContent = labels[operation.status] || operation.status.toUpperCase();
     status.className = `status ${operation.status === 'error' ? 'offline' : busy ? 'online' : operation.status === 'finished' ? 'info' : 'offline'}`;
     document.getElementById('replay-operation-message').textContent = operation.message || 'Choose a preset to save, process, and play the last 5 or 10 seconds at 0.5× speed.';
-    document.querySelectorAll('[data-replay-preset], [data-replay]').forEach(button => { button.disabled = busy; });
+    document.querySelectorAll('[data-replay-preset], [data-replay]').forEach(button => { button.disabled = button.dataset.replay === 'stop-playback' ? false : busy; });
   }
   function renderReplays(replays) {
     const library = document.getElementById('replay-library');
@@ -302,7 +307,7 @@
       const unavailable = item.available === false;
       const title = item.presetSeconds ? `${item.presetSeconds}s slow-motion replay` : item.filename;
       const meta = `${new Date(item.createdAt).toLocaleString()} · ${escapeHtml(item.player1)} vs ${escapeHtml(item.player2)}${item.slowMotion ? ` · ${item.slowMotion}×` : ''}`;
-      return `<div class="replay-item${unavailable ? ' unavailable' : ''}"><div><b>${escapeHtml(title)}</b><small>${escapeHtml(meta)}</small>${unavailable ? '<em>File unavailable</em>' : ''}</div><button class="button small primary" data-play="${escapeHtml(item.id)}"${unavailable ? ' disabled' : ''}>Play</button><button class="button small danger" data-delete="${escapeHtml(item.id)}">Delete</button></div>`;
+      return `<div class="replay-item${unavailable ? ' unavailable' : ''}"><div class="ri-main"><b>${escapeHtml(title)}</b><small>${escapeHtml(meta)}</small>${unavailable ? '<em>File unavailable</em>' : ''}</div><div class="ri-actions"><button class="btn sm primary" data-play="${escapeHtml(item.id)}"${unavailable ? ' disabled' : ''}>Play</button><button class="btn sm" data-rename="${escapeHtml(item.id)}" data-name="${escapeHtml(item.filename)}">Rename</button><button class="btn sm danger" data-delete="${escapeHtml(item.id)}">Delete</button></div></div>`;
     }).join('');
   }
   const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
@@ -565,8 +570,8 @@
     const result = await action('/api/match/clear', { method: 'POST' }, 'Match cleared.', document.getElementById('clear-match'));
     if (!result) undoStack.pop();
   };
-  document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
-  document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.textContent} started.`, button));
+  document.getElementById('undo').onclick = async () => { const previous = undoStack.pop(); if (!previous) return; previous.revision = state.revision; state = previous; try { await save(); notify('Last action undone.'); } catch (error) { notify(friendlyError(error.message), 'error'); } };
+  document.querySelectorAll('[data-broadcast]').forEach(button => button.onclick = () => action(`/api/broadcast/${button.dataset.broadcast}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ winner: button.dataset.winner ? Number(button.dataset.winner) : null }) }, `${button.childNodes[0].textContent.trim()} started.`, button));
   document.querySelectorAll('[data-timer-action]').forEach(button => button.onclick = () => action('/api/broadcast/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: button.dataset.timerAction }) }, 'Broadcast timer updated.', button));
   document.getElementById('refresh-preview').onclick = () => {
     if (youtubeVideoId) createYouTubePreview(youtubeVideoId).catch(error => setPreviewStatus('Connection error', 'YouTube preview unavailable', error.message));
@@ -586,14 +591,19 @@
   document.getElementById('replay-library').onclick = event => {
     const play = event.target.closest('[data-play]');
     const remove = event.target.closest('[data-delete]');
+    const rename = event.target.closest('[data-rename]');
     if (play) action('/api/replay/play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: play.dataset.play }) }, 'Replay sequence started.', play, 'Loading…');
-    if (remove) action(`/api/replays/${remove.dataset.delete}`, { method: 'DELETE' }, 'Replay deleted successfully.', remove, 'Deleting…');
+    if (rename) {
+      const name = window.prompt('Rename replay', rename.dataset.name || '');
+      if (name && name.trim() && name.trim() !== rename.dataset.name) action(`/api/replays/${rename.dataset.rename}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: name.trim() }) }, 'Replay renamed.', rename, 'Saving…');
+    }
+    if (remove && window.confirm('Delete this replay permanently?')) action(`/api/replays/${remove.dataset.delete}`, { method: 'DELETE' }, 'Replay deleted successfully.', remove, 'Deleting…');
   };
   function connectControlSocket() {
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
     socket.onopen = () => {
       clearTimeout(socketReconnectTimer);
-      document.getElementById('save-status').textContent = 'Connected';
+      setConnection('Connected', 'ok');
     };
     socket.onmessage = event => {
       try {
@@ -608,12 +618,12 @@
       }
     };
     socket.onclose = () => {
-      document.getElementById('save-status').textContent = 'Reconnecting…';
+      setConnection('Reconnecting…', 'warn');
       clearTimeout(socketReconnectTimer);
       socketReconnectTimer = setTimeout(connectControlSocket, 1505);
     };
     socket.onerror = () => {
-      document.getElementById('save-status').textContent = 'Connection error';
+      setConnection('Connection error', 'bad');
     };
   }
   connectControlSocket();
@@ -636,57 +646,5 @@
     return Boolean(data.authenticated);
   }
   authenticateOperator().then(() => Promise.all([fetch('/api/state').then(response => response.json()), fetch('/api/network').then(response => response.json())])).then(([data, network]) => { state = data.state; render(); renderObs(data.obs); renderReplays(data.replays); renderReplayOperation(data.state.replayOperation); document.getElementById('obs-address').value = state.obs.address; document.getElementById('obs-port').value = state.obs.port; document.getElementById('network-addresses').textContent = `LAN: ${(network.addresses || []).join(', ') || 'localhost'}:${network.port}`; refreshGuestProfiles(); loadObsCredentials(); loadSavedYouTubePreview(); }).catch(error => notify(friendlyError(error.message), 'error'));
-  const previewPanel = document.querySelector('.preview-panel');
-  let previewStuck = false;
-  let previewPlaceholder = null;
-  let previewNaturalRect = null;
-  let previewOriginalDocumentTop = null;
-  function updatePreviewStickyState() {
-    if (window.innerWidth <= 1000) {
-      if (previewPlaceholder) previewPlaceholder.remove();
-      previewPlaceholder = null;
-      previewPanel.style.removeProperty('position');
-      previewPanel.style.removeProperty('top');
-      previewPanel.style.removeProperty('left');
-      previewPanel.style.removeProperty('width');
-      previewPanel.classList.remove('is-sticky');
-      previewStuck = false;
-      previewOriginalDocumentTop = null;
-      return;
-    }
-    if (previewOriginalDocumentTop == null) {
-      const rect = previewPanel.getBoundingClientRect();
-      previewOriginalDocumentTop = rect.top + window.scrollY;
-    }
-    const stuck = window.scrollY + 16 >= previewOriginalDocumentTop;
-    if (!stuck && previewStuck) {
-      if (previewPlaceholder) previewPlaceholder.remove();
-      previewPlaceholder = null;
-      previewPanel.style.removeProperty('position');
-      previewPanel.style.removeProperty('top');
-      previewPanel.style.removeProperty('left');
-      previewPanel.style.removeProperty('width');
-      previewNaturalRect = null;
-    }
-    if (stuck !== previewStuck) {
-      previewStuck = stuck;
-      previewPanel.classList.toggle('is-sticky', stuck);
-      if (stuck) {
-        previewNaturalRect = previewPanel.getBoundingClientRect();
-        previewPlaceholder = document.createElement('div');
-        previewPlaceholder.className = 'preview-placeholder';
-        previewPlaceholder.style.width = `${previewNaturalRect.width}px`;
-        previewPlaceholder.style.height = `${previewNaturalRect.height}px`;
-        previewPanel.parentNode.insertBefore(previewPlaceholder, previewPanel);
-        previewPanel.style.position = 'fixed';
-        previewPanel.style.top = '16px';
-        previewPanel.style.left = `${previewNaturalRect.left}px`;
-        previewPanel.style.width = `${previewNaturalRect.width}px`;
-      }
-    }
-  }
-  window.addEventListener('scroll', updatePreviewStickyState, { passive: true });
-  window.addEventListener('resize', updatePreviewStickyState);
-  updatePreviewStickyState();
   setInterval(updateTimerDisplay, 250);
 }());

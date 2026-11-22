@@ -6,16 +6,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Bahria University Esports Showdown</title>
   <link rel="stylesheet" href="/css/overlay.css">
+  <link rel="stylesheet" href="/css/overlay-states.css">
 </head>
 
 <body>
   <main id="overlay" class="overlay" data-mode="gameplay">
-    <header class="topline">
-      <div class="brand"><span class="micro-label">BAHRIA UNIVERSITY</span><strong data-bind="tournament"></strong>
-      </div>
-      <div class="match-meta"><span data-bind="round"></span><i></i><span data-bind="roundTime"></span><i></i><span
-          data-bind="game"></span></div>
-    </header>
 
     <section class="state state-gameplay">
       <div class="gameplay-board" aria-label="Active match scoreboard">
@@ -56,36 +51,75 @@
     </section>
 
     <section class="state state-intro">
-      <div class="intro-heading"><span data-bind="tournament"></span><small><span data-bind="round"></span> · <span
-            data-bind="roundTime"></span> · <span data-bind="game"></span></small></div>
-      <div class="intro-players">
-        <div class="intro-player intro-one"><span class="micro-label">PLAYER 1</span><strong
-            data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
-        <div class="intro-vs">VS</div>
-        <div class="intro-player intro-two"><span class="micro-label">PLAYER 2</span><strong
-            data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
+      <div class="geo shimmer-host" aria-hidden="true">
+        <i class="geo-zone zone-p1 shimmer"></i><i class="geo-zone zone-p2 shimmer"></i>
+        <i class="geo-tri intro-tri-p1"></i><i class="geo-tri intro-tri-p2"></i>
+        <i class="geo-line intro-line"></i>
+        <i class="geo-edge intro-edge-p1"></i><i class="geo-edge intro-edge-p2"></i>
       </div>
+      <header class="intro-head">
+        <div class="lockup"><span class="tick"></span><div><span class="micro-label">TEKKEN 8</span><strong data-bind="tournament"></strong></div></div>
+        <div class="intro-meta"><span class="micro-label">ROUND</span><strong data-bind="round"></strong></div>
+      </header>
+      <div class="intro-player intro-one"><span class="micro-label">PLAYER 1</span><strong data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
+      <div class="intro-vs"><i></i><b>VS</b><i></i></div>
+      <div class="intro-player intro-two"><span class="micro-label">PLAYER 2</span><strong data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
+      <footer class="intro-foot"><span data-bind="game"></span><i></i><span data-bind="matchFormat"></span><i></i><span data-bind="roundTime"></span></footer>
     </section>
 
     <section class="state state-transition">
-      <span class="micro-label">NEXT GAME</span><strong data-bind="round"></strong>
-      <div class="transition-score"><span data-bind="p1Name"></span><b data-bind="p1Score"></b><i>—</i><b
-          data-bind="p2Score"></b><span data-bind="p2Name"></span></div><small data-bind="game"></small>
+      <div class="trans-band shimmer">
+        <div class="trans-side trans-one"><strong data-bind="p1Name"></strong><b data-bind="p1Score"></b></div>
+        <div class="trans-plate">
+          <span class="micro-label">NEXT GAME</span>
+          <strong data-bind="game"></strong>
+          <span class="trans-round" data-bind="round"></span>
+          <span class="trans-chevrons" aria-hidden="true"><i></i><i></i><i></i></span>
+        </div>
+        <div class="trans-side trans-two"><b data-bind="p2Score"></b><strong data-bind="p2Name"></strong></div>
+      </div>
     </section>
 
     <section class="state state-winner">
-      <span class="micro-label">MATCH COMPLETE</span><strong class="winner-label">WINNER</strong><b class="winner-name"
-        data-bind="winnerName"></b><small><span data-bind="winnerCharacter"></span> · <span
-          data-bind="round"></span></small>
-      <div class="winner-score"><span data-bind="p1Score"></span> — <span data-bind="p2Score"></span></div>
+      <div class="geo win-geo" aria-hidden="true">
+        <i class="geo-zone win-panel shimmer"></i>
+        <i class="geo-tri win-tri"></i>
+        <i class="geo-line win-line"></i>
+        <i class="geo-edge win-edge"></i>
+      </div>
+      <div class="win-copy">
+        <span class="micro-label win-kicker"><i class="tick"></i>MATCH COMPLETE</span>
+        <strong class="winner-label">WINNER</strong>
+        <b class="winner-name" data-bind="winnerName"></b>
+        <div class="win-meta"><span data-bind="winnerCharacter"></span><i></i><span data-bind="round"></span></div>
+        <div class="winner-score"><span class="ws-1" data-bind="p1Score"></span><i></i><span class="ws-2" data-bind="p2Score"></span></div>
+      </div>
     </section>
 
     <section class="state state-standby">
-      <span class="micro-label">BAHRIA UNIVERSITY ESPORTS</span><strong>SHOWDOWN</strong><small>TOURNAMENT
-        STANDBY</small>
+      <div class="geo shimmer-host" aria-hidden="true">
+        <i class="geo-zone sb-panel shimmer"></i>
+        <i class="geo-tri sb-tri-blue"></i><i class="geo-tri sb-tri-red"></i><i class="geo-tri sb-tri-base"></i>
+        <i class="geo-line sb-line-a"></i><i class="geo-line sb-line-b"></i>
+      </div>
+      <div class="sb-copy">
+        <span class="micro-label sb-kicker"><i class="tick"></i>TEKKEN 8</span>
+        <strong class="sb-title" data-bind="tournament"></strong>
+        <div class="sb-status"><i></i><span>TOURNAMENT STANDBY</span></div>
+      </div>
+      <div class="sb-next">
+        <span class="micro-label">UP NEXT</span>
+        <div class="sb-vs"><strong class="sb-p1" data-bind="p1Name"></strong><b>VS</b><strong class="sb-p2" data-bind="p2Name"></strong></div>
+        <span class="sb-round"><span data-bind="round"></span><i></i><span data-bind="game"></span></span>
+      </div>
     </section>
 
     <section class="state state-special-guest">
+      <div class="geo" aria-hidden="true">
+        <i class="geo-zone guest-panel shimmer"></i>
+        <i class="geo-tri guest-tri"></i>
+        <i class="geo-edge guest-edge"></i>
+      </div>
       <div class="guest-accent"></div>
       <div class="guest-content">
         <span class="micro-label">SPECIAL GUEST</span>
@@ -99,121 +133,10 @@
     </section>
 
     <section class="state state-replay-intro">
-      <span class="replay-intro-kicker">BAHRIA UNIVERSITY ESPORTS SHOWDOWN</span>
-      <strong>INSTANT REPLAY</strong>
-      <span class="replay-intro-subtitle">PREVIOUS MOMENT</span>
-      <span class="replay-intro-line"></span>
-      <small>REPLAY INCOMING</small>
-    </section>
-
-    <video id="replay-video" class="replay-video" playsinline muted preload="auto"
-      controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture></video>
-    <div class="replay-badge">INSTANT REPLAY</div>
-  </main>
-  <script src="/js/overlay.js"></script>
-</body>
-
-</html><!doctype html>
-<html lang="en">
-
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Bahria University Esports Showdown</title>
-  <link rel="stylesheet" href="/css/overlay.css">
-</head>
-
-<body>
-  <main id="overlay" class="overlay" data-mode="gameplay">
-    <header class="topline">
-      <div class="brand"><span class="micro-label">BAHRIA UNIVERSITY</span><strong data-bind="tournament"></strong>
+      <div class="geo" aria-hidden="true">
+        <i class="geo-zone ri-zone-p1 shimmer"></i><i class="geo-zone ri-zone-p2 shimmer"></i>
+        <i class="geo-edge ri-edge-p1"></i><i class="geo-edge ri-edge-p2"></i>
       </div>
-      <div class="match-meta"><span data-bind="round"></span><i></i><span data-bind="roundTime"></span><i></i><span
-          data-bind="game"></span></div>
-    </header>
-
-    <section class="state state-gameplay">
-      <div class="gameplay-board" aria-label="Active match scoreboard">
-        <div class="gameplay-player gameplay-one">
-          <div class="gameplay-name">
-            <span class="player-side">P1</span>
-            <div class="player-copy">
-              <strong data-bind="p1Name"></strong>
-            </div>
-          </div>
-          <div class="gameplay-score p1-score"><span data-bind="p1Score"></span></div>
-        </div>
-
-        <div class="gameplay-center">
-          <div class="game-win-row p1-win-row" data-score-row="p1" aria-label="Player 1 game wins"></div>
-          <div class="center-info">
-            <span class="center-tournament" data-bind="tournament"></span>
-            <div class="center-match">
-              <span data-bind="round"></span>
-              <i></i>
-              <strong data-bind="game"></strong>
-            </div>
-            <span class="center-format" data-bind="matchFormat"></span>
-          </div>
-          <div class="game-win-row p2-win-row" data-score-row="p2" aria-label="Player 2 game wins"></div>
-        </div>
-
-        <div class="gameplay-player gameplay-two">
-          <div class="gameplay-name">
-            <span class="player-side">P2</span>
-            <div class="player-copy">
-              <strong data-bind="p2Name"></strong>
-            </div>
-          </div>
-          <div class="gameplay-score p2-score"><span data-bind="p2Score"></span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="state state-intro">
-      <div class="intro-heading"><span data-bind="tournament"></span><small><span data-bind="round"></span> · <span
-            data-bind="roundTime"></span> · <span data-bind="game"></span></small></div>
-      <div class="intro-players">
-        <div class="intro-player intro-one"><span class="micro-label">PLAYER 1</span><strong
-            data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
-        <div class="intro-vs">VS</div>
-        <div class="intro-player intro-two"><span class="micro-label">PLAYER 2</span><strong
-            data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
-      </div>
-    </section>
-
-    <section class="state state-transition">
-      <span class="micro-label">NEXT GAME</span><strong data-bind="round"></strong>
-      <div class="transition-score"><span data-bind="p1Name"></span><b data-bind="p1Score"></b><i>—</i><b
-          data-bind="p2Score"></b><span data-bind="p2Name"></span></div><small data-bind="game"></small>
-    </section>
-
-    <section class="state state-winner">
-      <span class="micro-label">MATCH COMPLETE</span><strong class="winner-label">WINNER</strong><b class="winner-name"
-        data-bind="winnerName"></b><small><span data-bind="winnerCharacter"></span> · <span
-          data-bind="round"></span></small>
-      <div class="winner-score"><span data-bind="p1Score"></span> — <span data-bind="p2Score"></span></div>
-    </section>
-
-    <section class="state state-standby">
-      <span class="micro-label">BAHRIA UNIVERSITY ESPORTS</span><strong>SHOWDOWN</strong><small>TOURNAMENT
-        STANDBY</small>
-    </section>
-
-    <section class="state state-special-guest">
-      <div class="guest-accent"></div>
-      <div class="guest-content">
-        <span class="micro-label">SPECIAL GUEST</span>
-        <strong class="guest-name" data-bind="guestName"></strong>
-        <span class="guest-title" data-bind="guestTitle"></span>
-        <span class="guest-organization" data-bind="guestOrganization"></span>
-        <small class="guest-subtitle" data-bind="guestSubtitle"></small>
-      </div>
-      <div class="guest-photo-frame"><img class="guest-photo" data-bind-src="guestPhoto" alt=""></div>
-      <div class="guest-branding" data-bind="tournament"></div>
-    </section>
-
-    <section class="state state-replay-intro">
       <span class="replay-intro-kicker">BAHRIA UNIVERSITY ESPORTS SHOWDOWN</span>
       <strong>INSTANT REPLAY</strong>
       <span class="replay-intro-subtitle">PREVIOUS MOMENT</span>

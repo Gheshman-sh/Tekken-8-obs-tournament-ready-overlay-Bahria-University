@@ -23,6 +23,10 @@
     special_guest: () => document.querySelector('.state-special-guest'),
     replay_intro: () => document.querySelector('.state-replay-intro')
   };
+  function setReplayIdentity(replay) {
+    activeReplayId = replay && replay.id ? String(replay.id) : '';
+    activeReplayToken = replay && replay.token ? String(replay.token) : '';
+  }
   const presetKeyframes = (preset, direction) => {
     const entering = direction === 'in';
     switch (preset) {
@@ -44,11 +48,6 @@
         return entering ? [{ opacity: 0, filter: 'blur(8px)', transform: 'scale(1.025)' }, { opacity: 1, filter: 'blur(0)', transform: 'scale(1)' }] : [{ opacity: 1, filter: 'blur(0)' }, { opacity: 0, filter: 'blur(5px)', transform: 'scale(.985)' }];
       default:
         return entering ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }];
-    }
-
-    function setReplayIdentity(replay) {
-      activeReplayId = replay && replay.id ? String(replay.id) : '';
-      activeReplayToken = replay && replay.token ? String(replay.token) : '';
     }
   };
   function transitionConfig(state, mode) {
@@ -214,12 +213,13 @@
     previousScores[playerKey] = safeScore;
   }
 
-  // Long names step down in size by length so they never clip in the fixed-width name panel.
+  // Long names step down in size by length so they never clip in their fixed-width panels (HUD and presentation states).
   // Class-based (not measured) so it is correct even while the gameplay state is hidden.
   function fitName(key, name) {
     const length = String(name || '').length;
     const cls = length > 22 ? 'len-xl' : length > 16 ? 'len-lg' : length > 12 ? 'len-md' : '';
-    document.querySelectorAll(`.state-gameplay [data-bind="${key}"]`).forEach(element => {
+    document.querySelectorAll(`[data-bind="${key}"]`).forEach(element => {
+      element.style.setProperty('--n', String(Math.max(length, 1)));
       element.classList.remove('len-md', 'len-lg', 'len-xl');
       if (cls) element.classList.add(cls);
     });
@@ -245,6 +245,8 @@
     const broadcast = state.broadcast || { mode: state.replayActive ? 'replay' : 'gameplay' };
     const mode = state.replayActive ? 'replay' : broadcast.mode;
     const winner = broadcast.winner === 2 ? state.player2 : state.player1;
+    // keep the last winner side while the winner state animates out (server clears it on exit)
+    if (broadcast.winner === 1 || broadcast.winner === 2) overlay.dataset.winner = String(broadcast.winner);
     if (mode !== previousMode) {
       if (!previousMode) {
         cancelActiveTransition(mode);
@@ -272,6 +274,7 @@
     set('p1Score', state.player1.score); set('p2Name', state.player2.name);
     set('p2Character', settings.showCharacters ? state.player2.character : ''); set('p2Score', state.player2.score);
     fitName('p1Name', state.player1.name); fitName('p2Name', state.player2.name);
+    fitName('winnerName', winner.name);
     bumpScore('p1', state.player1.score); bumpScore('p2', state.player2.score);
     renderScoreIndicators('p1', state.player1.triangles);
     renderScoreIndicators('p2', state.player2.triangles);
