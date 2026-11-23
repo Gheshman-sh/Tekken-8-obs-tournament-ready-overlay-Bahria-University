@@ -104,45 +104,58 @@ html { font-size: calc(100vw / 192) }
 }
 
 /* ==========================================================================
-   MATCH INTRO — opposing red / blue zones split on a shared diagonal
+   MATCH INTRO — two flat zones on one diagonal seam, names centred on it
    ========================================================================== */
 .state-intro { background: var(--base) }
 .state-intro > :not(.geo) { z-index: 1 }
 
-.zone-p1 { clip-path: polygon(0 0, 59% 0, 41% 100%, 0 100%); background: linear-gradient(100deg, var(--p1-deep), var(--panel) 85%) }
-.zone-p2 { clip-path: polygon(61% 0, 100% 0, 100% 100%, 43% 100%); background: linear-gradient(260deg, var(--p2-deep), var(--panel) 85%); --shimmer-delay: -9s }
-.intro-tri-p1 { clip-path: polygon(0 100%, 0 34%, 33% 100%); background: var(--p1-wash) }
-.intro-tri-p2 { clip-path: polygon(100% 0, 100% 62%, 66% 0); background: var(--p2-wash) }
-.intro-line { clip-path: polygon(55% 0, 55.07% 0, 37.07% 100%, 37% 100%) }
-.intro-edge-p1 { clip-path: polygon(58.55% 0, 59% 0, 41% 100%, 40.55% 100%); background: var(--p1) }
-.intro-edge-p2 { clip-path: polygon(61% 0, 61.45% 0, 43.45% 100%, 43% 100%); background: var(--p2) }
+.zone-p1 { clip-path: polygon(0 0, 59% 0, 41% 100%, 0 100%); background: var(--p1-deep) }
+.zone-p2 { clip-path: polygon(59% 0, 100% 0, 100% 100%, 41% 100%); background: var(--p2-deep); --shimmer-delay: -9s }
+/* one facet per side, cut parallel to the seam */
+.intro-tri-p1 { clip-path: polygon(0 100%, 0 40%, 27% 100%); background: rgba(255, 255, 255, .025) }
+.intro-tri-p2 { clip-path: polygon(100% 0, 100% 60%, 73% 0); background: rgba(255, 255, 255, .025) }
+.intro-seam { clip-path: polygon(58.8% 0, 59.2% 0, 41.2% 100%, 40.8% 100%); background: var(--text); opacity: .85 }
 
 .intro-head {
   position: absolute;
   top: 5.6rem; left: 8rem; right: 8rem;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  gap: 4rem;
+  font-size: 2.4rem;
+  line-height: 1;
+  letter-spacing: .08em;
   animation: rise .6s var(--ease-out) .1s both;
 }
-.lockup { display: flex; gap: 1.6rem; align-items: stretch }
-.lockup strong { display: block; margin-top: 1rem; font-size: 3.2rem; line-height: 1; letter-spacing: .06em }
-.intro-meta { text-align: right }
-.intro-meta strong { display: block; margin-top: 1rem; font-size: 3.2rem; line-height: 1; letter-spacing: .06em }
+.intro-head strong { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.intro-head strong:last-child { color: var(--text-dim); flex: none }
 
 .intro-player {
   position: absolute;
-  top: 36rem;
-  width: 82rem;
+  top: 0; bottom: 0;
+  width: 72rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.intro-one { left: 8rem; animation: from-left .7s var(--ease-out) .18s both }
-.intro-two { right: 8rem; text-align: right; animation: from-right .7s var(--ease-out) .18s both }
-.intro-player .micro-label { color: var(--p1) }
-.intro-two .micro-label { color: var(--p2) }
+.intro-one { left: 8rem; align-items: flex-start; animation: from-left .7s var(--ease-out) .18s both }
+.intro-two { right: 8rem; align-items: flex-end; text-align: right; animation: from-right .7s var(--ease-out) .18s both }
+
+.side-tag {
+  display: grid; place-items: center;
+  width: 5.6rem; height: 4rem;
+  margin-bottom: 2.4rem;
+  background: var(--p1);
+  color: var(--ink);
+  font: 900 2rem/1 var(--font-display);
+  letter-spacing: .04em;
+  clip-path: polygon(22% 0, 100% 0, 78% 100%, 0 100%);
+}
+.intro-two .side-tag { background: var(--p2) }
+
 .intro-player strong {
-  display: block;
-  margin: 1.6rem 0 1.8rem;
-  font-size: min(14rem, calc(135rem / var(--n, 8)));
+  max-width: 100%;
+  font-size: min(14rem, calc(115rem / var(--n, 8)));
   line-height: .95;
   letter-spacing: .01em;
   white-space: nowrap;
@@ -150,7 +163,8 @@ html { font-size: calc(100vw / 192) }
   text-overflow: ellipsis;
 }
 .intro-player small {
-  display: block;
+  margin-top: 2rem;
+  max-width: 100%;
   color: var(--text-dim);
   font: 700 2.4rem/1 var(--font-display);
   letter-spacing: .2em;
@@ -160,36 +174,119 @@ html { font-size: calc(100vw / 192) }
 }
 .intro-player small:empty { display: none }
 
+/* VS sits on a plate so the seam passes behind it instead of through the letters */
 .intro-vs {
   position: absolute;
   left: 50%; top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2.2rem;
+  display: grid; place-items: center;
+  width: 12rem; height: 12rem;
+  background: var(--base);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
   animation: vs-in .6s var(--ease-out) .35s both;
 }
-.intro-vs b { font: 900 9.6rem/1 var(--font-display); letter-spacing: .04em; color: var(--text) }
-.intro-vs i { width: .2rem; height: 9rem; background: var(--line) }
+.intro-vs b { font: 900 4.4rem/1 var(--font-display); letter-spacing: .04em }
 @keyframes vs-in {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(.82) }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.8) }
   to   { opacity: 1; transform: translate(-50%, -50%) }
 }
+.intro-vs { transform: translate(-50%, -50%) }
 
 .intro-foot {
   position: absolute;
-  left: 8rem; bottom: 6.2rem;
+  left: 8rem; bottom: 5.6rem;
   display: flex;
-  align-items: center;
-  gap: 2.4rem;
-  font: 700 2.2rem/1 var(--font-ui);
+  gap: 4rem;
+  font: 700 2rem/1 var(--font-ui);
   letter-spacing: .22em;
   color: var(--text-dim);
   animation: rise .6s var(--ease-out) .45s both;
 }
-.intro-foot i { width: .2rem; height: 2.2rem; background: var(--text-mute) }
-.intro-foot span:empty, .intro-foot span:empty + i { display: none }
+.intro-foot span:empty { display: none }
+
+/* ==========================================================================
+   FINALS — championship title card: one light plate, players beneath it
+   ========================================================================== */
+.state-finals { background: var(--base); text-transform: uppercase }
+.state-finals > :not(.geo) { z-index: 1 }
+.state-finals strong, .state-finals b { font-family: var(--font-display); font-weight: 800 }
+
+.fin-zone-p1 { clip-path: polygon(0 0, 30% 0, 10% 100%, 0 100%); background: var(--p1-deep) }
+.fin-zone-p2 { clip-path: polygon(90% 0, 100% 0, 100% 100%, 70% 100%); background: var(--p2-deep); --shimmer-delay: -9s }
+.fin-edge-p1 { clip-path: polygon(29.6% 0, 30% 0, 10% 100%, 9.6% 100%); background: var(--p1) }
+.fin-edge-p2 { clip-path: polygon(90% 0, 90.4% 0, 70.4% 100%, 70% 100%); background: var(--p2) }
+
+.fin-head {
+  position: absolute;
+  top: 7rem; left: 0; right: 0;
+  text-align: center;
+  font-size: 2.6rem;
+  line-height: 1;
+  letter-spacing: .14em;
+  color: var(--text-dim);
+  animation: rise .6s var(--ease-out) .1s both;
+}
+
+.fin-plate {
+  position: absolute;
+  left: 50%; top: 24rem;
+  width: 116rem; height: 36rem;
+  margin-left: -58rem;
+  display: grid; place-items: center;
+  background: var(--plate);
+  clip-path: polygon(7rem 0, 100% 0, calc(100% - 7rem) 100%, 0 100%);
+  animation: plate-in .7s var(--ease-out) .15s both;
+}
+.fin-plate strong { color: var(--base); font-size: 30rem; line-height: .9; letter-spacing: .06em; padding-left: 2rem }
+@keyframes plate-in {
+  from { opacity: 0; clip-path: polygon(50% 0, 50% 0, 50% 100%, 50% 100%) }
+  to   { opacity: 1; clip-path: polygon(7rem 0, 100% 0, calc(100% - 7rem) 100%, 0 100%) }
+}
+
+.fin-versus {
+  position: absolute;
+  left: 12rem; right: 12rem; top: 68rem;
+  display: grid;
+  grid-template-columns: 1fr 12rem 1fr;
+  align-items: start;
+  animation: rise .6s var(--ease-out) .4s both;
+}
+.fin-side { display: flex; flex-direction: column; min-width: 0 }
+.fin-one { align-items: flex-end; text-align: right }
+.fin-two { align-items: flex-start; text-align: left }
+.fin-side .side-tag { margin-bottom: 1.6rem }
+.fin-two .side-tag { background: var(--p2) }
+.fin-side strong {
+  max-width: 100%;
+  font-size: min(8.4rem, calc(70rem / var(--n, 8)));
+  line-height: 1;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fin-side small {
+  margin-top: 1.4rem;
+  color: var(--text-dim);
+  font: 700 2.2rem/1 var(--font-display);
+  letter-spacing: .2em;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fin-side small:empty { display: none }
+.fin-vs { align-self: center; margin-top: 5.6rem; text-align: center; font-size: 3.2rem; letter-spacing: .12em; color: var(--text-mute) }
+
+.fin-foot {
+  position: absolute;
+  left: 0; right: 0; bottom: 6rem;
+  display: flex; justify-content: center; gap: 4rem;
+  font: 700 2.2rem/1 var(--font-ui);
+  letter-spacing: .22em;
+  color: var(--text-dim);
+  animation: rise .6s var(--ease-out) .5s both;
+}
+.fin-foot span:empty { display: none }
 
 /* ==========================================================================
    GAME TRANSITION — compact horizontal band, plate + chevrons for momentum
@@ -566,11 +663,16 @@ html { font-size: calc(100vw / 192) }
 .gameplay-two .gameplay-name::after { animation-delay: -8s }
 .gameplay-center::after { animation-delay: -15s }
 
+/* ---------- operator visibility toggles (hide in place so layouts never reflow) ---------- */
+.overlay:not(.show-tournament) [data-bind="tournament"] { visibility: hidden }
+.overlay:not(.show-round) [data-bind="round"],
+.overlay:not(.show-round) .center-match i { visibility: hidden }
+
 /* ---------- motion preferences ---------- */
 @media (prefers-reduced-motion: reduce) {
   .shimmer::after, .gameplay-name::after, .gameplay-center::after,
   .trans-chevrons i { animation: none }
   .shimmer::after, .gameplay-name::after, .gameplay-center::after { display: none }
-  .state-intro *, .state-transition *, .state-winner *, .state-standby *,
+  .state-intro *, .state-finals *, .state-transition *, .state-winner *, .state-standby *,
   .state-replay-intro *, .state-special-guest * { animation-duration: .01s !important; animation-delay: 0s !important }
 }

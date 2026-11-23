@@ -135,6 +135,8 @@ If the command is not recognized, install FFmpeg and add its `bin` folder to the
 
 The control panel is laid out for live operation. The top bar shows server, OBS, replay-buffer and on-air state. **Broadcast**, **Match** (scores and players) and **Instant replay** sit in the main workspace; OBS connection, overlay behaviour, presentation timers, special guest, transition animations and keyboard shortcuts live in **System & setup** below it. Destructive actions (Reset scores, Clear match, Delete replay) are separated and outlined in red.
 
+**Finals** (`Ctrl+8`) is a championship title card: a large "FINALS" plate with both players, the round name and the match format. It has its own auto-return timer (default 10 s, then Gameplay) under System & setup, and the API mode id is `finals` (`POST /api/broadcast/finals`).
+
 ### Match information
 
 Update the tournament name, round, round time, game number, player names, characters, and notes in the control panel. Changes synchronize to connected overlay clients.

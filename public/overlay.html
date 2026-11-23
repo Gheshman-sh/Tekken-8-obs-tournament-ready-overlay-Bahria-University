@@ -51,20 +51,31 @@
     </section>
 
     <section class="state state-intro">
-      <div class="geo shimmer-host" aria-hidden="true">
+      <div class="geo" aria-hidden="true">
         <i class="geo-zone zone-p1 shimmer"></i><i class="geo-zone zone-p2 shimmer"></i>
         <i class="geo-tri intro-tri-p1"></i><i class="geo-tri intro-tri-p2"></i>
-        <i class="geo-line intro-line"></i>
-        <i class="geo-edge intro-edge-p1"></i><i class="geo-edge intro-edge-p2"></i>
+        <i class="geo-edge intro-seam"></i>
       </div>
-      <header class="intro-head">
-        <div class="lockup"><span class="tick"></span><div><span class="micro-label">TEKKEN 8</span><strong data-bind="tournament"></strong></div></div>
-        <div class="intro-meta"><span class="micro-label">ROUND</span><strong data-bind="round"></strong></div>
-      </header>
-      <div class="intro-player intro-one"><span class="micro-label">PLAYER 1</span><strong data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
-      <div class="intro-vs"><i></i><b>VS</b><i></i></div>
-      <div class="intro-player intro-two"><span class="micro-label">PLAYER 2</span><strong data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
-      <footer class="intro-foot"><span data-bind="game"></span><i></i><span data-bind="matchFormat"></span><i></i><span data-bind="roundTime"></span></footer>
+      <header class="intro-head"><strong data-bind="tournament"></strong><strong data-bind="round"></strong></header>
+      <div class="intro-player intro-one"><span class="side-tag">P1</span><strong data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
+      <div class="intro-vs"><b>VS</b></div>
+      <div class="intro-player intro-two"><span class="side-tag">P2</span><strong data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
+      <footer class="intro-foot"><span data-bind="game"></span><span data-bind="matchFormat"></span><span data-bind="roundTime"></span></footer>
+    </section>
+
+    <section class="state state-finals">
+      <div class="geo" aria-hidden="true">
+        <i class="geo-zone fin-zone-p1 shimmer"></i><i class="geo-zone fin-zone-p2 shimmer"></i>
+        <i class="geo-edge fin-edge-p1"></i><i class="geo-edge fin-edge-p2"></i>
+      </div>
+      <header class="fin-head"><strong data-bind="tournament"></strong></header>
+      <div class="fin-plate"><strong>FINALS</strong></div>
+      <div class="fin-versus">
+        <div class="fin-side fin-one"><span class="side-tag">P1</span><strong data-bind="p1Name"></strong><small data-bind="p1Character"></small></div>
+        <b class="fin-vs">VS</b>
+        <div class="fin-side fin-two"><span class="side-tag">P2</span><strong data-bind="p2Name"></strong><small data-bind="p2Character"></small></div>
+      </div>
+      <footer class="fin-foot"><span data-bind="round"></span><span data-bind="matchFormat"></span></footer>
     </section>
 
     <section class="state state-transition">

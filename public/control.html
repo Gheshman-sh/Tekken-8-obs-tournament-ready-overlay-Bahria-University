@@ -52,11 +52,12 @@
           <div class="state-grid">
             <button data-broadcast="gameplay" class="btn state wide" type="button">Active gameplay <kbd>Ctrl+1</kbd></button>
             <button data-broadcast="match_intro" class="btn state" type="button">Match intro <kbd>Ctrl+2</kbd></button>
+            <button data-broadcast="finals" class="btn state" type="button">Finals <kbd>Ctrl+8</kbd></button>
             <button data-broadcast="game_transition" class="btn state" type="button">Game transition <kbd>Ctrl+3</kbd></button>
             <button data-broadcast="winner" data-winner="1" class="btn state p1" type="button">P1 winner <kbd>Ctrl+4</kbd></button>
             <button data-broadcast="winner" data-winner="2" class="btn state p2" type="button">P2 winner <kbd>Ctrl+5</kbd></button>
             <button data-broadcast="standby" class="btn state" type="button">Tournament standby <kbd>Ctrl+6</kbd></button>
-            <button data-broadcast="special_guest" class="btn state" type="button">Special guest <kbd>Ctrl+7</kbd></button>
+            <button data-broadcast="special_guest" class="btn state span" type="button">Special guest <kbd>Ctrl+7</kbd></button>
           </div>
           <div class="timer">
             <div class="timer-read"><small>Timer</small><b id="broadcast-timer-remaining">Manual</b><span class="timer-track" aria-hidden="true"><i id="timer-fill"></i></span></div>
@@ -172,6 +173,10 @@
             <button class="toggle compact" type="button" data-path="broadcastTimers.match_intro.enabled" aria-pressed="true" aria-label="Match intro automatic return"><span>Auto</span><b>ON</b></button>
             <input type="number" min="1" max="120" data-path="broadcastTimers.match_intro.duration" aria-label="Match intro seconds">
             <select data-path="broadcastTimers.match_intro.nextMode" aria-label="After match intro"><option value="gameplay">Gameplay</option><option value="standby">Standby</option></select>
+            <span class="tc-name">Finals</span>
+            <button class="toggle compact" type="button" data-path="broadcastTimers.finals.enabled" aria-pressed="true" aria-label="Finals automatic return"><span>Auto</span><b>ON</b></button>
+            <input type="number" min="1" max="120" data-path="broadcastTimers.finals.duration" aria-label="Finals seconds">
+            <select data-path="broadcastTimers.finals.nextMode" aria-label="After finals"><option value="gameplay">Gameplay</option><option value="standby">Standby</option></select>
             <span class="tc-name">Game transition</span>
             <button class="toggle compact" type="button" data-path="broadcastTimers.game_transition.enabled" aria-pressed="true" aria-label="Game transition automatic return"><span>Auto</span><b>ON</b></button>
             <input type="number" min="1" max="120" data-path="broadcastTimers.game_transition.duration" aria-label="Game transition seconds">
@@ -219,6 +224,7 @@
           <div class="adv-grid">
             <label>Gameplay<select data-transition-state="gameplay"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
             <label>Match intro<select data-transition-state="match_intro"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
+            <label>Finals<select data-transition-state="finals"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
             <label>Game transition<select data-transition-state="game_transition"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
             <label>Winner<select data-transition-state="winner"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
             <label>Tournament standby<select data-transition-state="standby"><option value="">Global</option><option value="fade">Fade</option><option value="slide-left">Slide Left</option><option value="slide-right">Slide Right</option><option value="slide-up">Slide Up</option><option value="slide-down">Slide Down</option><option value="zoom-in">Zoom In</option><option value="zoom-out">Zoom Out</option><option value="wipe">Wipe</option><option value="cinematic">Cinematic Fade</option></select></label>
@@ -238,6 +244,7 @@
             <span>Active gameplay <kbd>Ctrl+1</kbd></span>
             <span>Match intro <kbd>Ctrl+2</kbd></span>
             <span>Game transition <kbd>Ctrl+3</kbd></span>
+            <span>Finals <kbd>Ctrl+8</kbd></span>
             <span>P1 winner <kbd>Ctrl+4</kbd></span>
             <span>P2 winner <kbd>Ctrl+5</kbd></span>
             <span>Tournament standby <kbd>Ctrl+6</kbd></span>

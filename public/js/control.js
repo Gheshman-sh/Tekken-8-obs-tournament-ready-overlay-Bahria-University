@@ -55,7 +55,8 @@
   }
   function render() {
     paths.forEach(element => {
-      if (element === document.activeElement) return;
+      // keep what the operator is typing; toggle buttons keep focus after a click and must still repaint
+      if (element === document.activeElement && !element.classList.contains('toggle')) return;
       const value = get(state, element.dataset.path);
       if (element.classList.contains('toggle')) {
         const enabled = Boolean(value);
@@ -311,7 +312,7 @@
     }).join('');
   }
   const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
-  const presentationSequence = ['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'special_guest'];
+  const presentationSequence = ['gameplay', 'match_intro', 'finals', 'game_transition', 'winner', 'standby', 'special_guest'];
   function isEditableTarget(target) {
     return target instanceof HTMLElement && (
       target.isContentEditable ||
@@ -348,6 +349,7 @@
       case '5': activatePresentation('winner', 2); break;
       case '6': activatePresentation('standby'); break;
       case '7': activatePresentation('special_guest'); break;
+      case '8': activatePresentation('finals'); break;
       case 'z':
         if (!undoStack.length) handled = false;
         else document.getElementById('undo').click();
@@ -549,7 +551,7 @@
   document.getElementById('restore-transition-defaults').addEventListener('click', async () => {
     remember();
     state.transitionSettings = { preset: 'cinematic', duration: 700, easing: 'cubic-bezier(.22,.61,.36,1)', entrance: 'zoom-in', exit: 'fade' };
-    state.transitionOverrides = { gameplay: null, match_intro: null, game_transition: null, winner: null, standby: null, special_guest: null };
+    state.transitionOverrides = { gameplay: null, match_intro: null, finals: null, game_transition: null, winner: null, standby: null, special_guest: null };
     try { await save(); notify('Animation settings restored.'); } catch (error) { notify(friendlyError(error.message), 'error'); }
   });
   paths.forEach(element => element.addEventListener('change', async () => { const value = element.type === 'checkbox' ? element.checked : element.type === 'number' ? Number(element.value) : element.value; remember(); set(state, element.dataset.path, value); try { await save(); notify('Settings saved.'); } catch (error) { notify(friendlyError(error.message), 'error'); } }));

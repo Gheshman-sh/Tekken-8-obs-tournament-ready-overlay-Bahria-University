@@ -45,6 +45,7 @@ const defaultState = {
   transitionOverrides: {
     gameplay: null,
     match_intro: null,
+    finals: null,
     game_transition: null,
     winner: null,
     standby: null,
@@ -52,6 +53,7 @@ const defaultState = {
   },
   broadcastTimers: {
     match_intro: { enabled: true, duration: 8, nextMode: 'gameplay' },
+    finals: { enabled: true, duration: 10, nextMode: 'gameplay' },
     game_transition: { enabled: true, duration: 4, nextMode: 'gameplay' },
     winner: { enabled: true, duration: 10, nextMode: 'standby' }
   },
@@ -133,7 +135,7 @@ function normalizeStateValues(value) {
     player.score = safeNumber(player.score);
     player.triangles = Math.max(0, Math.min(3, Math.round(Number(player.triangles) || 0)));
   }
-  for (const key of ['match_intro', 'game_transition', 'winner']) {
+  for (const key of ['match_intro', 'finals', 'game_transition', 'winner']) {
     const timer = value.broadcastTimers[key];
     timer.enabled = Boolean(timer.enabled);
     timer.duration = Math.max(1, Math.min(120, Math.round(Number(timer.duration) || defaultState.broadcastTimers[key].duration)));
@@ -173,6 +175,7 @@ function mergeState(saved) {
       ...defaultState.broadcastTimers,
       ...(saved.broadcastTimers || {}),
       match_intro: { ...defaultState.broadcastTimers.match_intro, ...((saved.broadcastTimers || {}).match_intro || {}) },
+      finals: { ...defaultState.broadcastTimers.finals, ...((saved.broadcastTimers || {}).finals || {}) },
       game_transition: { ...defaultState.broadcastTimers.game_transition, ...((saved.broadcastTimers || {}).game_transition || {}) },
       winner: { ...defaultState.broadcastTimers.winner, ...((saved.broadcastTimers || {}).winner || {}) }
     },
@@ -208,7 +211,7 @@ let broadcastTimer;
 let reconnectTimer;
 let obsConnectInFlight = null;
 let lastObsConnection;
-const broadcastModes = new Set(['gameplay', 'match_intro', 'game_transition', 'winner', 'standby', 'special_guest', 'replay_intro', 'replay']);
+const broadcastModes = new Set(['gameplay', 'match_intro', 'finals', 'game_transition', 'winner', 'standby', 'special_guest', 'replay_intro', 'replay']);
 const timerActions = new Set(['skip', 'extend', 'cancel', 'gameplay', 'previous']);
 const operatorSessions = new Set();
 
@@ -606,7 +609,7 @@ app.put('/api/state', (req, res) => {
   persistAndBroadcast();
   res.json({ state: publicState() });
 });
-app.post('/api/broadcast/:mode(gameplay|match_intro|game_transition|winner|standby|special_guest|replay)', (req, res) => {
+app.post('/api/broadcast/:mode(gameplay|match_intro|finals|game_transition|winner|standby|special_guest|replay)', (req, res) => {
   const mode = req.params.mode;
   const winner = Number(req.body && req.body.winner);
   const configured = state.broadcastTimers[mode];

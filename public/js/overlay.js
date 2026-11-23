@@ -17,6 +17,7 @@
     gameplay: () => document.querySelector('.state-gameplay'),
     replay: () => document.querySelector('.state-gameplay'),
     match_intro: () => document.querySelector('.state-intro'),
+    finals: () => document.querySelector('.state-finals'),
     game_transition: () => document.querySelector('.state-transition'),
     winner: () => document.querySelector('.state-winner'),
     standby: () => document.querySelector('.state-standby'),
@@ -286,6 +287,8 @@
     set('guestSubtitle', guest.subtitle || 'BAHRIA UNIVERSITY ESPORTS SHOWDOWN');
     setSource('guestPhoto', guest.photo || '');
     overlay.classList.toggle('show-players', settings.showPlayers !== false);
+    overlay.classList.toggle('show-tournament', settings.showTournament !== false);
+    overlay.classList.toggle('show-round', settings.showRound !== false);
     overlay.classList.toggle('no-animations', settings.animationsEnabled === false);
     document.querySelector('.replay-badge').hidden = !(settings.showReplayIndicator && (mode === 'replay' || mode === 'replay_intro'));
     if (state.replayActive && state.activeReplay) {

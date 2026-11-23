@@ -36,6 +36,7 @@ body {
 
 .overlay[data-mode="gameplay"] .state-gameplay,
 .overlay[data-mode="match_intro"] .state-intro,
+.overlay[data-mode="finals"] .state-finals,
 .overlay[data-mode="game_transition"] .state-transition,
 .overlay[data-mode="winner"] .state-winner,
 .overlay[data-mode="replay"] .state-gameplay,
@@ -56,6 +57,7 @@ body {
 }
 
 .state-intro,
+.state-finals,
 .state-transition,
 .state-winner,
 .state-standby,
@@ -83,6 +85,10 @@ body {
   left: calc(var(--u) * 60);
   width: calc(var(--u) * 1800);
   height: calc(var(--u) * 78);
+  /* HUD width as a % of screen width: scales the whole board (and its height) proportionally, centred at the top */
+  --hud-vw: 70;
+  transform: scale(calc(var(--hud-vw) * 19.2 / 1800));
+  transform-origin: 50% 0;
   display: flex;
   align-items: stretch;
   filter: drop-shadow(0 calc(var(--u) * 6) calc(var(--u) * 10) rgba(0, 0, 0, .35));

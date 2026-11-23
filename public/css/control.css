@@ -160,6 +160,7 @@ kbd { margin-left: 4px; padding: 1px 5px; background: rgba(0,0,0,.28); border: 1
 .btn.state { min-height: 56px; flex-direction: column; gap: 4px; padding: 6px 8px; text-align: center; background: var(--surface-2); border-color: var(--line); font-size: 13px }
 .btn.state kbd { margin: 0 }
 .btn.state.wide { grid-column: 1 / -1; min-height: 52px; flex-direction: row }
+.btn.state.span { grid-column: 1 / -1; min-height: 44px; flex-direction: row }
 .btn.state.p1 { border-left: 3px solid var(--p1) }
 .btn.state.p2 { border-left: 3px solid var(--p2) }
 .btn.state.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent) }
